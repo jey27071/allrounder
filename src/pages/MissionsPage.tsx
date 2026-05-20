@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { seedDatabase } from '@/lib/seed'
-import { listMissions, getMission } from '@/lib/missions'
+import {
+  listMissions,
+  getMission,
+  archiveMission,
+  unarchiveMission,
+  deleteMission,
+} from '@/lib/missions'
 import type { Mission } from '@/types/app'
 import NewMissionModal from '@/components/NewMissionModal'
 import MissionChat from '@/components/MissionChat'
@@ -18,6 +24,7 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null)
   const [loading, setLoading] = useState(true)
   const [setupError, setSetupError] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
 
   useEffect(() => {
     void initialize()
@@ -54,7 +61,7 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
     await seedDatabase()
 
     // 미션 로드
-    const list = await listMissions()
+    const list = await listMissions({ onlyArchived: showArchived })
     setMissions(list)
     if (list.length > 0) {
       setSelectedMission(list[0])
@@ -62,8 +69,12 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
     setLoading(false)
   }
 
+  useEffect(() => {
+    void reloadMissions()
+  }, [showArchived])
+
   async function reloadMissions() {
-    const list = await listMissions()
+    const list = await listMissions({ onlyArchived: showArchived })
     setMissions(list)
     // Closure 이슈 회피: 함수형 setState로 현재값 기준 업데이트
     setSelectedMission((current) => {
@@ -82,6 +93,39 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
     // 최신 상태로 다시 fetch
     const fresh = await getMission(mission.id)
     setSelectedMission(fresh ?? mission)
+  }
+
+  async function handleArchive(mission: Mission) {
+    const result = await archiveMission(mission.id)
+    if (!result.ok) {
+      alert(`보관 실패: ${result.error}`)
+      return
+    }
+    if (selectedMission?.id === mission.id) setSelectedMission(null)
+    void reloadMissions()
+  }
+
+  async function handleUnarchive(mission: Mission) {
+    const result = await unarchiveMission(mission.id)
+    if (!result.ok) {
+      alert(`보관 해제 실패: ${result.error}`)
+      return
+    }
+    if (selectedMission?.id === mission.id) setSelectedMission(null)
+    void reloadMissions()
+  }
+
+  async function handleDelete(mission: Mission) {
+    if (!confirm(`정말로 "${mission.title}" 미션을 영구 삭제합니까?\n\n관련 메시지·산출물·일기까지 모두 삭제되며 복구할 수 없습니다.`)) {
+      return
+    }
+    const result = await deleteMission(mission.id)
+    if (!result.ok) {
+      alert(`삭제 실패: ${result.error}`)
+      return
+    }
+    if (selectedMission?.id === mission.id) setSelectedMission(null)
+    void reloadMissions()
   }
 
   if (setupError) {
@@ -109,12 +153,22 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
       <main className="flex h-full overflow-hidden">
         {/* Mission list */}
         <div className="w-64 border-r border-border overflow-y-auto p-4 space-y-2 shrink-0">
-          <div className="text-xs font-medium text-gray-500 px-1 mb-2">
-            미션 ({missions.length})
+          <div className="flex items-center justify-between px-1 mb-2">
+            <div className="text-xs font-medium text-gray-500">
+              {showArchived ? '보관함' : '미션'} ({missions.length})
+            </div>
+            <button
+              onClick={() => setShowArchived((v) => !v)}
+              className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-gray-50"
+            >
+              {showArchived ? '↩ 활성' : '📥 보관함'}
+            </button>
           </div>
           {missions.length === 0 ? (
             <div className="text-xs text-gray-400 px-1 mt-4">
-              미션이 없습니다.<br />좌측 사이드바의 [+ 새 미션]에서 시작하세요.
+              {showArchived
+                ? '보관된 미션이 없습니다.'
+                : '미션이 없습니다.\n좌측 사이드바의 [+ 새 미션]에서 시작하세요.'}
             </div>
           ) : (
             missions.map((m) => (
@@ -123,6 +177,9 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
                 mission={m}
                 isSelected={selectedMission?.id === m.id}
                 onClick={() => void handleSelectMission(m)}
+                onArchive={() => void handleArchive(m)}
+                onUnarchive={() => void handleUnarchive(m)}
+                onDelete={() => void handleDelete(m)}
               />
             ))
           )}

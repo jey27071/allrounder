@@ -45,19 +45,80 @@ export async function createMission(input: CreateMissionInput): Promise<Mission 
   return data as Mission
 }
 
-export async function listMissions(): Promise<Mission[]> {
+export async function listMissions(options: { includeArchived?: boolean; onlyArchived?: boolean } = {}): Promise<Mission[]> {
   if (!supabase) return []
 
-  const { data, error } = await supabase
-    .from('missions')
-    .select('*')
-    .order('created_at', { ascending: false })
+  let query = supabase.from('missions').select('*').order('created_at', { ascending: false })
+
+  if (options.onlyArchived) {
+    query = query.eq('archived', true)
+  } else if (!options.includeArchived) {
+    query = query.eq('archived', false)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('미션 목록 조회 실패:', error)
     return []
   }
   return (data ?? []) as Mission[]
+}
+
+export async function archiveMission(missionId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+  const { error } = await supabase
+    .from('missions')
+    .update({ archived: true, archived_at: new Date().toISOString() })
+    .eq('id', missionId)
+  if (error) {
+    console.error('미션 보관 실패:', error)
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
+}
+
+export async function unarchiveMission(missionId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+  const { error } = await supabase
+    .from('missions')
+    .update({ archived: false, archived_at: null })
+    .eq('id', missionId)
+  if (error) {
+    console.error('미션 보관 해제 실패:', error)
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
+}
+
+/**
+ * 미션을 영구 삭제. 연결된 메시지·산출물·일기는 ON DELETE CASCADE로 함께 삭제됨.
+ * 보관된 미션만 삭제 가능 (안전장치).
+ */
+export async function deleteMission(missionId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+
+  // 보관 상태 확인
+  const { data: mission, error: fetchErr } = await supabase
+    .from('missions')
+    .select('archived')
+    .eq('id', missionId)
+    .single()
+
+  if (fetchErr || !mission) {
+    return { ok: false, error: fetchErr?.message ?? '미션을 찾을 수 없습니다' }
+  }
+
+  if (!(mission as { archived: boolean }).archived) {
+    return { ok: false, error: '보관된 미션만 영구 삭제할 수 있습니다. 먼저 보관 처리하세요.' }
+  }
+
+  const { error } = await supabase.from('missions').delete().eq('id', missionId)
+  if (error) {
+    console.error('미션 삭제 실패:', error)
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
 }
 
 export async function getMission(missionId: string): Promise<Mission | null> {

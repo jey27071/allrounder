@@ -28,6 +28,7 @@ const SPECIALIST_NAMES: Record<SpecialistId, string> = {
 export default function SpecialistsPanel({ mission }: SpecialistsPanelProps) {
   const [invoking, setInvoking] = useState<SpecialistId | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   async function handleInvoke(id: SpecialistId) {
     setInvoking(id)
@@ -42,42 +43,59 @@ export default function SpecialistsPanel({ mission }: SpecialistsPanelProps) {
   const specialistIds = Object.keys(SPECIALIST_META) as SpecialistId[]
 
   return (
-    <div className="border-t border-border p-4">
-      <div className="text-xs font-medium text-gray-500 mb-3">
-        🎯 추가 전문가 검수 (메인 흐름과 별개)
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        {specialistIds.map((id) => {
-          const meta = SPECIALIST_META[id]
-          const isInvoking = invoking === id
-          const isDisabled = invoking !== null
-          return (
-            <button
-              key={id}
-              onClick={() => void handleInvoke(id)}
-              disabled={isDisabled}
-              className={`text-left p-3 rounded border border-border bg-white hover:border-primary transition disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`w-2.5 h-2.5 rounded-full ${SPECIALIST_COLORS[id]}`} />
-                <span className="font-medium text-sm">{SPECIALIST_NAMES[id]}</span>
-              </div>
-              <div className="text-xs text-gray-500 mb-1">{meta.label}</div>
-              <div className="text-[10px] text-gray-400">
-                {isInvoking ? '⏳ 작업 중...' : meta.description}
-              </div>
-            </button>
-          )
-        })}
-      </div>
-      {error && (
-        <div className="mt-3 p-2 bg-warning/10 border border-warning/30 rounded text-xs text-warning">
-          ⚠ {error}
+    <div className="border-t border-border shrink-0">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-gray-50 transition"
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-600">🎯 추가 전문가 검수</span>
+          <span className="text-[10px] text-gray-400">
+            ({specialistIds.length}명 · 메인 흐름과 별개)
+          </span>
+          {invoking && (
+            <span className="text-[10px] text-primary">⏳ {SPECIALIST_NAMES[invoking]} 작업 중</span>
+          )}
+        </div>
+        <span className="text-gray-400 text-xs">{expanded ? '▲' : '▼'}</span>
+      </button>
+
+      {expanded && (
+        <div className="p-3 border-t border-border bg-gray-50/50">
+          <div className="grid grid-cols-3 gap-1.5">
+            {specialistIds.map((id) => {
+              const meta = SPECIALIST_META[id]
+              const isInvoking = invoking === id
+              const isDisabled = invoking !== null
+              return (
+                <button
+                  key={id}
+                  onClick={() => void handleInvoke(id)}
+                  disabled={isDisabled}
+                  className="text-left p-2 rounded border border-border bg-white hover:border-primary transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={meta.description}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className={`w-2 h-2 rounded-full ${SPECIALIST_COLORS[id]}`} />
+                    <span className="font-medium text-xs">{SPECIALIST_NAMES[id]}</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500 truncate">
+                    {isInvoking ? '⏳' : meta.label}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {error && (
+            <div className="mt-2 p-2 bg-warning/10 border border-warning/30 rounded text-xs text-warning">
+              ⚠ {error}
+            </div>
+          )}
+          <div className="text-[10px] text-gray-400 mt-2">
+            💡 결과는 채팅 메시지로 추가됩니다
+          </div>
         </div>
       )}
-      <div className="text-[10px] text-gray-400 mt-2">
-        💡 보고서는 자비스 채팅에 메시지로 추가됩니다.
-      </div>
     </div>
   )
 }

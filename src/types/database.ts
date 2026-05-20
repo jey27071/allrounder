@@ -60,6 +60,8 @@ export type Database = {
           current_state: MissionState
           reject_cycle: number
           selected_candidate_index: number | null
+          archived: boolean
+          archived_at: string | null
           created_at: string
           updated_at: string
           completed_at: string | null
@@ -74,6 +76,8 @@ export type Database = {
           current_state?: MissionState
           reject_cycle?: number
           selected_candidate_index?: number | null
+          archived?: boolean
+          archived_at?: string | null
           created_at?: string
           updated_at?: string
           completed_at?: string | null
