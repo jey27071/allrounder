@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { orchestrate } from '@/lib/orchestrate'
-import type { Mission, Message } from '@/types/app'
+import type { Mission, Message, Deliverable, Diary } from '@/types/app'
 
 export interface CreateMissionInput {
   title: string
@@ -87,4 +87,36 @@ export async function listMessages(missionId: string): Promise<Message[]> {
     return []
   }
   return (data ?? []) as Message[]
+}
+
+export async function listDeliverables(missionId: string): Promise<Deliverable[]> {
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('deliverables')
+    .select('*')
+    .eq('mission_id', missionId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('산출물 조회 실패:', error)
+    return []
+  }
+  return (data ?? []) as Deliverable[]
+}
+
+export async function listDiaries(missionId: string): Promise<Diary[]> {
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('diaries')
+    .select('*')
+    .eq('mission_id', missionId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('일기 조회 실패:', error)
+    return []
+  }
+  return (data ?? []) as Diary[]
 }
