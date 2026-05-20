@@ -13,6 +13,15 @@ const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'settings', label: '설정' },
 ]
 
+function AgentDot({ color, name }: { color: string; name: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+      <span className={`w-2 h-2 rounded-full ${color}`} />
+      <span>{name}</span>
+    </div>
+  )
+}
+
 export default function Sidebar({ currentPage, onNavigate, onNewMission }: SidebarProps) {
   return (
     <aside className="border-r border-border p-6 flex flex-col">
@@ -50,22 +59,18 @@ export default function Sidebar({ currentPage, onNavigate, onNewMission }: Sideb
       </nav>
 
       <div className="mt-auto pt-6 border-t border-border">
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span className="w-2 h-2 rounded-full bg-agent-jarvis" />
-          <span>Jarvis</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-          <span className="w-2 h-2 rounded-full bg-agent-lumi" />
-          <span>Lumi</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-          <span className="w-2 h-2 rounded-full bg-agent-aki" />
-          <span>Aki</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-          <span className="w-2 h-2 rounded-full bg-agent-joi" />
-          <span>Joi</span>
-        </div>
+        <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">Core</div>
+        <AgentDot color="bg-agent-jarvis" name="Jarvis" />
+        <AgentDot color="bg-agent-lumi" name="Lumi" />
+        <AgentDot color="bg-agent-aki" name="Aki" />
+        <AgentDot color="bg-agent-joi" name="Joi" />
+        <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-4 mb-2">Specialists</div>
+        <AgentDot color="bg-agent-friday" name="Friday" />
+        <AgentDot color="bg-agent-tars" name="TARS" />
+        <AgentDot color="bg-agent-echo" name="Echo" />
+        <AgentDot color="bg-agent-kitt" name="KITT" />
+        <AgentDot color="bg-agent-ethica" name="Ethica" />
+        <AgentDot color="bg-agent-qa" name="QA봇" />
       </div>
     </aside>
   )

@@ -271,7 +271,9 @@ G5. 디자인 디테일(폰트·정확한 컬러·카피)은 디렉터의 영역
 (wisdom_principles 테이블의 active 원리들이 자동 첨부됨)
 `
 
-export const AGENT_SEEDS: AgentSeed[] = [
+import { SPECIALIST_SEEDS } from './specialists'
+
+const CORE_SEEDS: AgentSeed[] = [
   {
     id: 'jarvis',
     name: '자비스',
@@ -305,6 +307,8 @@ export const AGENT_SEEDS: AgentSeed[] = [
     color_token: 'agent-joi',
   },
 ]
+
+export const AGENT_SEEDS: AgentSeed[] = [...CORE_SEEDS, ...SPECIALIST_SEEDS]
 
 export interface WisdomSeed {
   title: string

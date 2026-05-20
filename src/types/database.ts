@@ -20,9 +20,15 @@ export type MissionState =
   | 'COMPLETED'
   | 'ERROR_STATE'
 
-export type AgentId = 'jarvis' | 'lumi' | 'aki' | 'joi'
+export type AgentId =
+  | 'jarvis' | 'lumi' | 'aki' | 'joi'
+  | 'friday' | 'tars' | 'echo' | 'kitt' | 'ethica' | 'qa_bot'
 
-export type MessageSender = 'director' | 'jarvis' | 'lumi' | 'aki' | 'joi' | 'system'
+export type MessageSender =
+  | 'director'
+  | 'jarvis' | 'lumi' | 'aki' | 'joi'
+  | 'friday' | 'tars' | 'echo' | 'kitt' | 'ethica' | 'qa_bot'
+  | 'system'
 
 export type MessageType =
   | 'Deliverable'
@@ -33,7 +39,9 @@ export type MessageType =
   | 'UserInput'
   | 'StatusUpdate'
 
-export type DeliverableType = 'opportunity_map' | 'product_blueprint' | 'screen_designs'
+export type DeliverableType =
+  | 'opportunity_map' | 'product_blueprint' | 'screen_designs'
+  | 'business_model' | 'frontend_code' | 'a11y_audit' | 'legal_review' | 'ethics_review' | 'test_suite'
 
 export type DeliverableStatus = 'pending' | 'approved' | 'rejected' | 'revised' | 'final'
 

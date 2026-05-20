@@ -19,7 +19,7 @@ export async function seedDatabase(): Promise<SeedResult> {
     return result
   }
 
-  // 1. agents 시드
+  // 1. agents 시드 — id 단위 idempotent (이미 있는 것은 건너뜀)
   const { data: existingAgents, error: agentsCheckErr } = await supabase
     .from('agents')
     .select('id')
@@ -29,12 +29,15 @@ export async function seedDatabase(): Promise<SeedResult> {
     return result
   }
 
-  if (!existingAgents || existingAgents.length === 0) {
-    const { error: insertErr } = await supabase.from('agents').insert(AGENT_SEEDS)
+  const existingIds = new Set((existingAgents ?? []).map((a) => a.id))
+  const missingAgents = AGENT_SEEDS.filter((s) => !existingIds.has(s.id))
+
+  if (missingAgents.length > 0) {
+    const { error: insertErr } = await supabase.from('agents').insert(missingAgents)
     if (insertErr) {
       result.errors.push(`agents 삽입 실패: ${insertErr.message}`)
     } else {
-      result.agentsInserted = AGENT_SEEDS.length
+      result.agentsInserted = missingAgents.length
     }
   }
 

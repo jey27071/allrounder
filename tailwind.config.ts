@@ -15,6 +15,12 @@ export default {
           lumi: '#7B6FB8',
           aki: '#5C8A6E',
           joi: '#C77B5C',
+          friday: '#C09553',
+          tars: '#5A6470',
+          echo: '#B89968',
+          kitt: '#A85050',
+          ethica: '#8B7EBF',
+          qa: '#4C7B7A',
         },
       },
       fontFamily: {

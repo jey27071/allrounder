@@ -7,6 +7,7 @@ import MessageBubble from './MessageBubble'
 import Cp1Modal from './Cp1Modal'
 import Cp2Modal from './Cp2Modal'
 import Cp3Modal from './Cp3Modal'
+import SpecialistsPanel from './SpecialistsPanel'
 
 interface MissionChatProps {
   mission: Mission
@@ -187,6 +188,8 @@ export default function MissionChat({ mission }: MissionChatProps) {
           현재 상태: <span className="font-mono">{mission.current_state}</span>
         </div>
       </div>
+
+      <SpecialistsPanel mission={mission} />
 
       {showCp1 && <Cp1Modal mission={mission} onClose={() => setShowCp1(false)} />}
       {showCp2 && <Cp2Modal mission={mission} onClose={() => setShowCp2(false)} />}

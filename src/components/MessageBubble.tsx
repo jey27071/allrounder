@@ -10,6 +10,12 @@ const SENDER_LABEL: Record<MessageSender, string> = {
   lumi: 'Lumi',
   aki: 'Aki',
   joi: 'Joi',
+  friday: 'Friday',
+  tars: 'TARS',
+  echo: 'Echo',
+  kitt: 'KITT',
+  ethica: 'Ethica',
+  qa_bot: 'QA봇',
   system: 'System',
 }
 
@@ -19,6 +25,12 @@ const SENDER_COLOR: Record<MessageSender, string> = {
   lumi: 'bg-agent-lumi text-white',
   aki: 'bg-agent-aki text-white',
   joi: 'bg-agent-joi text-white',
+  friday: 'bg-agent-friday text-white',
+  tars: 'bg-agent-tars text-white',
+  echo: 'bg-agent-echo text-white',
+  kitt: 'bg-agent-kitt text-white',
+  ethica: 'bg-agent-ethica text-white',
+  qa_bot: 'bg-agent-qa text-white',
   system: 'bg-gray-200 text-gray-600',
 }
 

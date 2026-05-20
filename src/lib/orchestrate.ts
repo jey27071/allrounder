@@ -12,10 +12,11 @@ export interface OrchestrateResponse {
 
 interface OrchestratePayload {
   mission_id: string
-  action?: 'cp1' | 'cp2' | 'cp3'
+  action?: 'cp1' | 'cp2' | 'cp3' | 'specialist'
   selected_candidate_index?: number
   decision?: 'approve' | 'revise' | 'branch'
   comments?: string
+  specialist_id?: string
 }
 
 async function callOrchestrate(payload: OrchestratePayload): Promise<OrchestrateResponse> {
@@ -85,5 +86,17 @@ export async function decideCp3(
     action: 'cp3',
     decision,
     comments,
+  })
+}
+
+/** Specialist 호출 — 메인 흐름과 별개로 추가 검수 */
+export async function invokeSpecialist(
+  missionId: string,
+  specialistId: string,
+): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'specialist',
+    specialist_id: specialistId,
   })
 }

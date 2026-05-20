@@ -29,11 +29,28 @@ function parseLooseJson(text: string): any | null {
   if (!text) return null
   let cleaned = text.trim()
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')
-  const firstBrace = cleaned.indexOf('{')
-  const lastBrace = cleaned.lastIndexOf('}')
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+
+  // 최상위가 { 또는 [ 중 어느 것인지 자동 판별
+  const firstObj = cleaned.indexOf('{')
+  const firstArr = cleaned.indexOf('[')
+  const lastObj = cleaned.lastIndexOf('}')
+  const lastArr = cleaned.lastIndexOf(']')
+
+  let firstChar = -1
+  let lastChar = -1
+  // 더 앞에 있는 여는 괄호를 최상위로 간주
+  if (firstObj >= 0 && (firstArr < 0 || firstObj < firstArr)) {
+    firstChar = firstObj
+    lastChar = lastObj
+  } else if (firstArr >= 0) {
+    firstChar = firstArr
+    lastChar = lastArr
   }
+
+  if (firstChar >= 0 && lastChar > firstChar) {
+    cleaned = cleaned.slice(firstChar, lastChar + 1)
+  }
+
   // 1차: 그대로 시도
   try { return JSON.parse(cleaned) } catch (_e) { /* fall through */ }
   // 2차: 수리 시도
@@ -497,7 +514,7 @@ ${JSON.stringify(blueprint.data, null, 2)}
   const joiResponse = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
-    model: 'gemini-2.5-flash',
+    model: 'gemini-2.5-pro', // HTML 코드 품질 + Flash 503 회피
     temperature: 0.7,
     jsonMode: true,
   })
@@ -507,6 +524,18 @@ ${JSON.stringify(blueprint.data, null, 2)}
   if (!designs) {
     console.error('Joi JSON parse failed. Raw:', joiResponse.slice(0, 500))
     designs = { error: 'parse_failed', raw: joiResponse }
+  }
+  // 정규화: Gemini가 최상위 배열로 반환한 경우 {screens: [...]}로 감쌈
+  if (Array.isArray(designs)) {
+    designs = { screens: designs }
+  }
+  // 정규화: 각 screen의 html 필드명 표준화 (html_tailwind → html)
+  if (designs?.screens && Array.isArray(designs.screens)) {
+    // deno-lint-ignore no-explicit-any
+    designs.screens = designs.screens.map((s: any) => ({
+      ...s,
+      html: s.html ?? s.html_tailwind ?? s.code ?? '',
+    }))
   }
 
   const md = renderScreenDesignsMarkdown(designs)
@@ -800,6 +829,161 @@ async function handleCp2Decision(supabase: SbClient, mission: Mission, decision:
   throw new Error(`알 수 없는 decision: ${decision}`)
 }
 
+// ============================================================
+// Specialist 호출 (메인 워크플로우와 별개)
+// ============================================================
+
+// deno-lint-ignore no-explicit-any
+const SPECIALIST_CONFIG: Record<string, any> = {
+  friday: {
+    label: '사업화 검증',
+    deliverableType: 'business_model',
+    model: 'gemini-2.5-pro',
+    needsBlueprint: false,
+    needsDesigns: false,
+  },
+  tars: {
+    label: 'React 코드 변환',
+    deliverableType: 'frontend_code',
+    model: 'gemini-2.5-pro',
+    needsBlueprint: true,
+    needsDesigns: true,
+  },
+  echo: {
+    label: '접근성 검수',
+    deliverableType: 'a11y_audit',
+    model: 'gemini-2.5-flash',
+    needsBlueprint: false,
+    needsDesigns: true,
+  },
+  kitt: {
+    label: '법무 1차 검토',
+    deliverableType: 'legal_review',
+    model: 'gemini-2.5-flash',
+    needsBlueprint: true,
+    needsDesigns: false,
+  },
+  ethica: {
+    label: '윤리 검토',
+    deliverableType: 'ethics_review',
+    model: 'gemini-2.5-pro',
+    needsBlueprint: true,
+    needsDesigns: false,
+  },
+  qa_bot: {
+    label: '테스트 케이스 생성',
+    deliverableType: 'test_suite',
+    model: 'gemini-2.5-flash',
+    needsBlueprint: true,
+    needsDesigns: false,
+  },
+}
+
+async function handleSpecialistInvocation(
+  supabase: SbClient,
+  mission: Mission,
+  specialistId: string,
+): Promise<string> {
+  const config = SPECIALIST_CONFIG[specialistId]
+  if (!config) throw new Error(`Unknown specialist: ${specialistId}`)
+
+  const systemPrompt = await loadAgentPrompt(supabase, specialistId)
+
+  // 필요한 컨텍스트 자료 로드
+  let contextParts = `미션 헌장:\n- 도메인: ${mission.domain}\n- 임무: ${mission.charter}\n${mission.context ? `- 컨텍스트: ${mission.context}` : ''}`
+
+  if (config.needsBlueprint || true) {
+    const blueprint = await getLatestDeliverable(supabase, mission.id, 'product_blueprint')
+    if (blueprint) {
+      contextParts += `\n\n[아키의 Product Blueprint]\n${JSON.stringify(blueprint.data, null, 2)}`
+    }
+  }
+
+  if (config.needsDesigns) {
+    const designs = await getLatestDeliverable(supabase, mission.id, 'screen_designs')
+    if (designs) {
+      contextParts += `\n\n[조이의 화면 디자인]\n${JSON.stringify(designs.data, null, 2)}`
+    }
+  }
+
+  // Lumi의 Opportunity Map도 항상 컨텍스트에 포함
+  const oppMap = await getLatestDeliverable(supabase, mission.id, 'opportunity_map')
+  if (oppMap) {
+    contextParts += `\n\n[루미의 Opportunity Map]\n${JSON.stringify(oppMap.data, null, 2)}`
+  }
+
+  const userPrompt = `${contextParts}\n\n위 정보를 바탕으로 당신의 전문 영역 보고서를 작성하세요. 시스템 프롬프트에 정의된 JSON 형식으로만 응답.`
+
+  const response = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: config.model,
+    temperature: 0.5,
+    jsonMode: true,
+  })
+
+  // deno-lint-ignore no-explicit-any
+  let parsed: any = parseLooseJson(response)
+  if (!parsed) {
+    console.error(`${specialistId} JSON parse failed. Raw:`, response.slice(0, 500))
+    parsed = { error: 'parse_failed', raw: response }
+  }
+
+  // 메시지 저장
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: specialistId,
+    recipient: 'director',
+    re: `${config.label} 보고서`,
+    type: 'Deliverable',
+    content: renderSpecialistMarkdown(specialistId, parsed),
+    metadata: { format: config.deliverableType, parsed },
+  })
+
+  // 산출물 저장
+  await supabase.from('deliverables').insert({
+    mission_id: mission.id,
+    type: config.deliverableType,
+    version: 'v1.0',
+    data: parsed,
+    raw_markdown: renderSpecialistMarkdown(specialistId, parsed),
+    created_by: specialistId,
+    status: 'final',
+  })
+
+  // diary 저장 (있을 경우)
+  if (parsed.diary) {
+    await supabase.from('diaries').insert({
+      mission_id: mission.id,
+      agent_id: specialistId,
+      context_label: `${config.label} v1.0`,
+      difficulty: parsed.diary.difficulty,
+      insight: parsed.diary.insight,
+      next_try: parsed.diary.next_try,
+    })
+  }
+
+  return mission.current_state // 상태는 그대로 유지 (specialist는 메인 흐름과 별개)
+}
+
+// deno-lint-ignore no-explicit-any
+function renderSpecialistMarkdown(specialistId: string, parsed: any): string {
+  if (parsed.error) return `(파싱 실패)\n\n${parsed.raw ?? ''}`
+  const config = SPECIALIST_CONFIG[specialistId]
+  let md = `## ${config.label} 보고서\n\n`
+  // 일반화: 객체의 각 키를 섹션으로 렌더
+  for (const [key, value] of Object.entries(parsed)) {
+    if (key === 'diary') continue
+    md += `### ${key.replace(/_/g, ' ')}\n`
+    if (typeof value === 'string') md += `${value}\n\n`
+    else md += `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\`\n\n`
+  }
+  if (parsed.diary) {
+    md += `### 회고\n- 난점: ${parsed.diary.difficulty}\n- 깨달음: ${parsed.diary.insight}\n- 다음에: ${parsed.diary.next_try}\n`
+  }
+  return md
+}
+
 async function handleCp3Decision(supabase: SbClient, mission: Mission, decision: string, comments?: string): Promise<string> {
   if (mission.current_state !== 'WAITING_CP3') {
     throw new Error(`CP3 결정은 WAITING_CP3 상태에서만 가능 (현재: ${mission.current_state})`)
@@ -852,7 +1036,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json()
-    const { mission_id, action, selected_candidate_index, decision, comments } = body
+    const { mission_id, action, selected_candidate_index, decision, comments, specialist_id } = body
 
     if (!mission_id) return jsonResp({ error: 'mission_id required' }, 400)
 
@@ -873,6 +1057,9 @@ Deno.serve(async (req) => {
       newState = await handleCp2Decision(supabase, mission, decision, comments)
     } else if (action === 'cp3') {
       newState = await handleCp3Decision(supabase, mission, decision, comments)
+    } else if (action === 'specialist') {
+      if (!specialist_id) return jsonResp({ error: 'specialist_id required' }, 400)
+      newState = await handleSpecialistInvocation(supabase, mission, specialist_id)
     } else {
       // 자동 진행 (상태 기반)
       switch (mission.current_state) {
