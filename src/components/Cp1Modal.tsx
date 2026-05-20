@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import { getLatestDeliverable } from '@/lib/deliverables'
 import { decideCp1 } from '@/lib/orchestrate'
 import type { Mission } from '@/types/app'
@@ -35,14 +36,43 @@ export default function Cp1Modal({ mission, onClose }: Cp1ModalProps) {
 
   async function loadData() {
     setLoading(true)
+    setError(null)
+
+    // 1차: deliverables 테이블
     const d = await getLatestDeliverable(mission.id, 'opportunity_map')
-    if (!d) {
-      setError('Opportunity Map 찾을 수 없음')
-    } else {
+    if (d?.data) {
       const data = d.data as { summary?: string; candidates?: Candidate[] }
-      setSummary(data.summary ?? '')
-      setCandidates(data.candidates ?? [])
+      if (data.candidates && data.candidates.length > 0) {
+        setSummary(data.summary ?? '')
+        setCandidates(data.candidates)
+        setLoading(false)
+        return
+      }
     }
+
+    // 2차 폴백: 최신 Lumi 메시지의 metadata.parsed 에서 추출
+    if (supabase) {
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('metadata')
+        .eq('mission_id', mission.id)
+        .eq('sender', 'lumi')
+        .eq('type', 'Deliverable')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      const parsed = msgs?.[0]?.metadata?.parsed as
+        | { summary?: string; candidates?: Candidate[] }
+        | undefined
+      if (parsed?.candidates && parsed.candidates.length > 0) {
+        setSummary(parsed.summary ?? '')
+        setCandidates(parsed.candidates)
+        setLoading(false)
+        return
+      }
+    }
+
+    setError('후보 데이터를 찾을 수 없습니다. 루미가 작업을 완료했는지 확인하세요.')
     setLoading(false)
   }
 
