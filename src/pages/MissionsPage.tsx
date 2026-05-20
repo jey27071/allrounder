@@ -65,10 +65,11 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
   async function reloadMissions() {
     const list = await listMissions()
     setMissions(list)
-    if (selectedMission) {
-      const updated = list.find((m) => m.id === selectedMission.id)
-      if (updated) setSelectedMission(updated)
-    }
+    // Closure 이슈 회피: 함수형 setState로 현재값 기준 업데이트
+    setSelectedMission((current) => {
+      if (!current) return current
+      return list.find((m) => m.id === current.id) ?? current
+    })
   }
 
   function handleMissionCreated(mission: Mission) {

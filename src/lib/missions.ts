@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { orchestrate } from '@/lib/orchestrate'
 import type { Mission, Message } from '@/types/app'
 
 export interface CreateMissionInput {
@@ -38,13 +39,8 @@ export async function createMission(input: CreateMissionInput): Promise<Mission 
     content: `[CP0 미션 헌장]\n\n도메인: ${input.domain}\n임무: ${input.charter}${input.context ? `\n\n컨텍스트:\n${input.context}` : ''}`,
   })
 
-  // 자비스의 첫 응답 (LLM 없이 더미 — 10.5에서 LLM 호출로 교체)
-  await supabase.from('messages').insert({
-    mission_id: data.id,
-    sender: 'jarvis',
-    type: 'StatusUpdate',
-    content: `네, ${input.domain} 도메인에서 미션을 시작하겠습니다. 루미에게 위임 후 보고드릴게요.`,
-  })
+  // 자비스 LLM 호출 — fire and forget (응답은 Realtime으로 도착)
+  void orchestrate(data.id)
 
   return data as Mission
 }
