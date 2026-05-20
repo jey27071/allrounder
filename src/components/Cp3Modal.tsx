@@ -12,7 +12,8 @@ interface Cp3ModalProps {
 interface ScreenItem {
   name: string
   purpose: string
-  html: string
+  html?: string
+  html_tailwind?: string  // Gemini가 가끔 이 필드명으로 출력
   design_notes: string
 }
 
@@ -143,7 +144,7 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
                       <h3 className="font-bold text-base mb-1">{current.name}</h3>
                       <p className="text-sm text-gray-600">{current.purpose}</p>
                     </div>
-                    <ScreenPreview html={current.html} height={500} />
+                    <ScreenPreview html={current.html ?? current.html_tailwind ?? ''} height={500} />
                     {current.design_notes && (
                       <div className="p-3 bg-gray-50 rounded text-xs leading-relaxed">
                         <strong>디자인 노트:</strong>

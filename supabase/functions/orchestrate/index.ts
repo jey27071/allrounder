@@ -65,7 +65,7 @@ async function callGemini(opts: CallGeminiOpts): Promise<string> {
     systemInstruction: { parts: [{ text: opts.systemPrompt }] },
     generationConfig: {
       temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 32768,
     },
   }
   if (opts.jsonMode) {
@@ -360,7 +360,7 @@ ${JSON.stringify(opportunityMap.data, null, 2)}
   const akiResponse = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     temperature: 0.3,
     jsonMode: true,
   })
@@ -497,7 +497,7 @@ ${JSON.stringify(blueprint.data, null, 2)}
   const joiResponse = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     temperature: 0.7,
     jsonMode: true,
   })
@@ -647,7 +647,7 @@ P0는 5개 이내. 페르소나는 구체적 이름·맥락 필수.`
   const akiResponse = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
-    model: 'gemini-2.5-pro',
+    model: 'gemini-2.5-flash',
     temperature: 0.6,
     jsonMode: true,
   })
