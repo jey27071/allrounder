@@ -14,6 +14,29 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 
 // ============================================================
+// 견고한 JSON 파서 (마크다운 fence 제거, 첫 { ~ 마지막 } 추출)
+// ============================================================
+
+// deno-lint-ignore no-explicit-any
+function parseLooseJson(text: string): any | null {
+  if (!text) return null
+  let cleaned = text.trim()
+  // 마크다운 fence 제거
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')
+  // 첫 { 부터 마지막 } 까지 추출
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace = cleaned.lastIndexOf('}')
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1)
+  }
+  try {
+    return JSON.parse(cleaned)
+  } catch (_e) {
+    return null
+  }
+}
+
+// ============================================================
 // Gemini API 호출
 // ============================================================
 
@@ -35,7 +58,7 @@ async function callGemini(opts: CallGeminiOpts): Promise<string> {
     systemInstruction: { parts: [{ text: opts.systemPrompt }] },
     generationConfig: {
       temperature: opts.temperature ?? 0.7,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
     },
   }
   if (opts.jsonMode) {
@@ -209,13 +232,11 @@ signals 배열은 최소 2개, 모두 검증 가능한 구체적 근거여야 �
     jsonMode: true,
   })
 
-  // JSON 파싱 시도
+  // JSON 파싱 시도 (마크다운 fence 처리 + 부분 복구)
   // deno-lint-ignore no-explicit-any
-  let parsed: any
-  try {
-    parsed = JSON.parse(lumiResponse)
-  } catch (e) {
-    console.error('Lumi JSON parse failed:', e)
+  let parsed: any = parseLooseJson(lumiResponse)
+  if (!parsed) {
+    console.error('Lumi JSON parse failed. Raw:', lumiResponse.slice(0, 500))
     parsed = { error: 'parse_failed', raw: lumiResponse }
   }
 
@@ -338,14 +359,21 @@ ${JSON.stringify(opportunityMap.data, null, 2)}
   })
 
   // deno-lint-ignore no-explicit-any
-  let review: any
-  try {
-    review = JSON.parse(akiResponse)
-  } catch {
+  let review: any = parseLooseJson(akiResponse)
+  if (!review) {
+    console.error('Aki review JSON parse failed. Raw:', akiResponse.slice(0, 500))
     review = { decision: 'reject', error: 'parse_failed', raw: akiResponse }
   }
 
-  const isPass = review.decision === 'pass'
+  // MVP: threshold 완화 (16 → 12). Gemini Flash 품질 고려.
+  const PASS_THRESHOLD = 12
+  let isPass = review.decision === 'pass'
+  if (!isPass && typeof review.quality_total === 'number' && review.quality_total >= PASS_THRESHOLD && (!review.blocking_check || Object.values(review.blocking_check).every((v: unknown) => typeof v === 'string' && (v as string).includes('통과')))) {
+    // threshold 충족 + blocking 통과 시 강제 pass
+    isPass = true
+    review.decision = 'pass'
+    review.note = `자동 통과 (threshold ${PASS_THRESHOLD} 충족)`
+  }
 
   // 메시지 저장
   const messageBody = isPass
@@ -503,10 +531,9 @@ P0는 5개 이내. 페르소나는 구체적 이름·맥락 필수.`
   })
 
   // deno-lint-ignore no-explicit-any
-  let blueprint: any
-  try {
-    blueprint = JSON.parse(akiResponse)
-  } catch {
+  let blueprint: any = parseLooseJson(akiResponse)
+  if (!blueprint) {
+    console.error('Aki blueprint JSON parse failed. Raw:', akiResponse.slice(0, 500))
     blueprint = { error: 'parse_failed', raw: akiResponse }
   }
 
