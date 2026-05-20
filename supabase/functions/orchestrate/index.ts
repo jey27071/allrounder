@@ -72,9 +72,52 @@ interface CallGeminiOpts {
   jsonMode?: boolean
 }
 
-async function callGemini(opts: CallGeminiOpts): Promise<string> {
-  const model = opts.model ?? 'gemini-2.5-flash'
+// 503/429 등 일시적 장애 시 재시도. 그 외(400/401/403)는 즉시 throw.
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504])
+const MAX_RETRIES = 2 // 초기 1회 + 재시도 2회 = 총 3회 시도
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// deno-lint-ignore no-explicit-any
+async function attemptGeminiModel(model: string, body: any): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!text) {
+        throw new Error('Gemini empty response: ' + JSON.stringify(data).slice(0, 500))
+      }
+      return text
+    }
+
+    const errText = await response.text()
+    lastError = new Error(`Gemini API error (${response.status}) on ${model}: ${errText}`)
+
+    if (!RETRYABLE_STATUSES.has(response.status) || attempt === MAX_RETRIES) {
+      throw lastError
+    }
+
+    const backoffMs = 1000 * Math.pow(2, attempt) // 1s, 2s
+    console.warn(`Gemini ${model} ${response.status} — retrying in ${backoffMs}ms (${attempt + 1}/${MAX_RETRIES})`)
+    await sleep(backoffMs)
+  }
+
+  throw lastError ?? new Error(`Gemini ${model} unreachable`)
+}
+
+async function callGemini(opts: CallGeminiOpts): Promise<string> {
+  const primaryModel = opts.model ?? 'gemini-2.5-flash'
 
   // deno-lint-ignore no-explicit-any
   const body: any = {
@@ -89,23 +132,16 @@ async function callGemini(opts: CallGeminiOpts): Promise<string> {
     body.generationConfig.responseMimeType = 'application/json'
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-
-  if (!response.ok) {
-    const errText = await response.text()
-    throw new Error(`Gemini API error (${response.status}): ${errText}`)
+  try {
+    return await attemptGeminiModel(primaryModel, body)
+  } catch (err) {
+    // pro 모델이 재시도 모두 실패 시 flash로 폴백
+    if (primaryModel === 'gemini-2.5-pro') {
+      console.warn(`Gemini pro 실패, flash로 폴백. 원인: ${err instanceof Error ? err.message : String(err)}`)
+      return await attemptGeminiModel('gemini-2.5-flash', body)
+    }
+    throw err
   }
-
-  const data = await response.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text) {
-    throw new Error('Gemini empty response: ' + JSON.stringify(data).slice(0, 500))
-  }
-  return text
 }
 
 // ============================================================
