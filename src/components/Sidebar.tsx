@@ -13,11 +13,24 @@ const NAV_ITEMS: { key: PageKey; label: string }[] = [
   { key: 'settings', label: '설정' },
 ]
 
-function AgentDot({ color, name }: { color: string; name: string }) {
+const TEAM = [
+  { color: 'bg-agent-lumi', name: 'Lumi', role: '리서치·전략' },
+  { color: 'bg-agent-aki', name: 'Aki', role: '설계·검수' },
+  { color: 'bg-agent-joi', name: 'Joi', role: '비주얼 디자인' },
+  { color: 'bg-agent-friday', name: 'Friday', role: '사업화' },
+  { color: 'bg-agent-tars', name: 'TARS', role: 'React 코드' },
+  { color: 'bg-agent-echo', name: 'Echo', role: '접근성' },
+  { color: 'bg-agent-kitt', name: 'KITT', role: '법무' },
+  { color: 'bg-agent-ethica', name: 'Ethica', role: '윤리' },
+  { color: 'bg-agent-qa', name: 'QA봇', role: '테스트' },
+]
+
+function AgentDot({ color, name, role }: { color: string; name: string; role?: string }) {
   return (
-    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-      <span className={`w-2 h-2 rounded-full ${color}`} />
-      <span>{name}</span>
+    <div className="flex items-center gap-2 text-xs mt-1">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
+      <span className="text-gray-700">{name}</span>
+      {role && <span className="text-[10px] text-gray-400 ml-auto">{role}</span>}
     </div>
   )
 }
@@ -59,18 +72,17 @@ export default function Sidebar({ currentPage, onNavigate, onNewMission }: Sideb
       </nav>
 
       <div className="mt-auto pt-6 border-t border-border">
-        <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">Core</div>
-        <AgentDot color="bg-agent-jarvis" name="Jarvis" />
-        <AgentDot color="bg-agent-lumi" name="Lumi" />
-        <AgentDot color="bg-agent-aki" name="Aki" />
-        <AgentDot color="bg-agent-joi" name="Joi" />
-        <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-4 mb-2">Specialists</div>
-        <AgentDot color="bg-agent-friday" name="Friday" />
-        <AgentDot color="bg-agent-tars" name="TARS" />
-        <AgentDot color="bg-agent-echo" name="Echo" />
-        <AgentDot color="bg-agent-kitt" name="KITT" />
-        <AgentDot color="bg-agent-ethica" name="Ethica" />
-        <AgentDot color="bg-agent-qa" name="QA봇" />
+        <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">
+          Orchestrator
+        </div>
+        <AgentDot color="bg-agent-jarvis" name="Jarvis" role="라우팅" />
+
+        <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-4 mb-2">
+          Team ({TEAM.length})
+        </div>
+        {TEAM.map((agent) => (
+          <AgentDot key={agent.name} color={agent.color} name={agent.name} role={agent.role} />
+        ))}
       </div>
     </aside>
   )

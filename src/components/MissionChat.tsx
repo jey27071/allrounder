@@ -7,7 +7,7 @@ import MessageBubble from './MessageBubble'
 import Cp1Modal from './Cp1Modal'
 import Cp2Modal from './Cp2Modal'
 import Cp3Modal from './Cp3Modal'
-import SpecialistsPanel from './SpecialistsPanel'
+import AgentTeamPanel from './AgentTeamPanel'
 
 interface MissionChatProps {
   mission: Mission
@@ -340,7 +340,7 @@ export default function MissionChat({ mission }: MissionChatProps) {
         </div>
       </div>
 
-      <SpecialistsPanel mission={mission} />
+      <AgentTeamPanel mission={mission} />
 
       {showCp1 && <Cp1Modal mission={mission} onClose={() => setShowCp1(false)} />}
       {showCp2 && <Cp2Modal mission={mission} onClose={() => setShowCp2(false)} />}
