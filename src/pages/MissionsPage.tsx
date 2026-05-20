@@ -119,6 +119,16 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
     if (!confirm(`정말로 "${mission.title}" 미션을 영구 삭제합니까?\n\n관련 메시지·산출물·일기까지 모두 삭제되며 복구할 수 없습니다.`)) {
       return
     }
+
+    // 안전장치: 보관되지 않은 미션은 먼저 보관 후 삭제 (deleteMission 서버 검증 통과 목적)
+    if (!mission.archived) {
+      const archiveResult = await archiveMission(mission.id)
+      if (!archiveResult.ok) {
+        alert(`삭제 준비 실패: ${archiveResult.error}`)
+        return
+      }
+    }
+
     const result = await deleteMission(mission.id)
     if (!result.ok) {
       alert(`삭제 실패: ${result.error}`)

@@ -100,8 +100,6 @@ export default function MissionListCard({
                     <button
                       onClick={stopAndRun(onDelete)}
                       className="w-full px-3 py-1.5 text-xs hover:bg-warning/10 text-warning text-left"
-                      disabled={!mission.archived}
-                      title={mission.archived ? '' : '먼저 보관해야 삭제할 수 있습니다'}
                     >
                       🗑 영구 삭제
                     </button>
