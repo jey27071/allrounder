@@ -9,6 +9,7 @@ const SENDER_LABEL: Record<MessageSender, string> = {
   jarvis: 'Jarvis',
   lumi: 'Lumi',
   aki: 'Aki',
+  joi: 'Joi',
   system: 'System',
 }
 
@@ -17,6 +18,7 @@ const SENDER_COLOR: Record<MessageSender, string> = {
   jarvis: 'bg-agent-jarvis text-white',
   lumi: 'bg-agent-lumi text-white',
   aki: 'bg-agent-aki text-white',
+  joi: 'bg-agent-joi text-white',
   system: 'bg-gray-200 text-gray-600',
 }
 

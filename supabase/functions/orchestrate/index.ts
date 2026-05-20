@@ -455,6 +455,121 @@ ${JSON.stringify(opportunityMap.data, null, 2)}
   return 'LUMI_RESUBMITTING'
 }
 
+// --- JOI_DESIGNING (or JOI_REVISING) ---
+async function handleJoiDesigning(supabase: SbClient, mission: Mission): Promise<string> {
+  const systemPrompt = await loadAgentPrompt(supabase, 'joi')
+
+  // Aki의 Blueprint 로드
+  const blueprint = await getLatestDeliverable(supabase, mission.id, 'product_blueprint')
+  if (!blueprint) {
+    throw new Error('Product Blueprint not found for Joi')
+  }
+
+  // 수정 요청 컨텍스트 (있을 경우)
+  let reviseContext = ''
+  if (mission.current_state === 'JOI_REVISING') {
+    const { data: lastRevise } = await supabase
+      .from('messages')
+      .select('content')
+      .eq('mission_id', mission.id)
+      .eq('sender', 'director')
+      .eq('type', 'UserInput')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    if (lastRevise) {
+      reviseContext = `\n\n[디렉터의 수정 요청]\n${lastRevise.content}\n\n위 수정 요청을 반영해 새 시안을 작성하세요.`
+    }
+  }
+
+  const userPrompt = `[아키의 Product Blueprint를 받아 시각 시안을 작성합니다]
+
+Blueprint 데이터 (JSON):
+${JSON.stringify(blueprint.data, null, 2)}
+
+미션 헌장:
+- 도메인: ${mission.domain}
+- 임무: ${mission.charter}
+
+위 Blueprint의 P0 기능 중 핵심 3~5개 화면을 HTML+TailwindCSS 코드로 작성하세요.
+지정된 JSON 형식으로만 응답.${reviseContext}`
+
+  const joiResponse = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: 'gemini-2.5-pro',
+    temperature: 0.7,
+    jsonMode: true,
+  })
+
+  // deno-lint-ignore no-explicit-any
+  let designs: any = parseLooseJson(joiResponse)
+  if (!designs) {
+    console.error('Joi JSON parse failed. Raw:', joiResponse.slice(0, 500))
+    designs = { error: 'parse_failed', raw: joiResponse }
+  }
+
+  const md = renderScreenDesignsMarkdown(designs)
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'joi',
+    recipient: 'director',
+    cc: ['aki'],
+    re: 'Screen Designs v1.0 — 제출',
+    type: 'Deliverable',
+    content: md,
+    metadata: { format: 'screen_designs', parsed: designs },
+  })
+
+  await supabase.from('deliverables').insert({
+    mission_id: mission.id,
+    type: 'screen_designs',
+    version: 'v1.0',
+    data: designs,
+    raw_markdown: md,
+    created_by: 'joi',
+    status: 'pending',
+  })
+
+  if (designs.diary) {
+    await supabase.from('diaries').insert({
+      mission_id: mission.id,
+      agent_id: 'joi',
+      context_label: 'Joi Screen Designs v1.0',
+      difficulty: designs.diary.difficulty,
+      insight: designs.diary.insight,
+      next_try: designs.diary.next_try,
+    })
+  }
+
+  await supabase.from('missions').update({
+    current_state: 'WAITING_CP3',
+    updated_at: new Date().toISOString(),
+  }).eq('id', mission.id)
+
+  return 'WAITING_CP3'
+}
+
+// deno-lint-ignore no-explicit-any
+function renderScreenDesignsMarkdown(d: any): string {
+  if (d.error) return `(파싱 실패)\n\n${d.raw ?? ''}`
+  let md = `## Screen Designs v1.0\n\n`
+  if (d.design_intent) md += `**디자인 의도**\n${d.design_intent}\n\n`
+  if (d.design_tokens) {
+    md += `**디자인 토큰**\n`
+    for (const [k, v] of Object.entries(d.design_tokens)) md += `- ${k}: ${v}\n`
+    md += `\n`
+  }
+  md += `### 화면 (${d.screens?.length ?? 0}개)\n\n`
+  for (const s of d.screens ?? []) {
+    md += `#### ${s.name}\n- 목적: ${s.purpose}\n- 노트: ${s.design_notes}\n\n`
+  }
+  if (d.interaction_notes) md += `**인터랙션 메모**\n${d.interaction_notes}\n\n`
+  if (d.diary) md += `### 회고 일기\n- 난점: ${d.diary.difficulty}\n- 깨달음: ${d.diary.insight}\n- 다음에: ${d.diary.next_try}\n`
+  return md
+}
+
 // --- AKI_DESIGNING ---
 async function handleAkiDesigning(supabase: SbClient, mission: Mission): Promise<string> {
   const systemPrompt = await loadAgentPrompt(supabase, 'aki')
@@ -657,6 +772,45 @@ async function handleCp2Decision(supabase: SbClient, mission: Mission, decision:
       sender: 'director',
       type: 'Approval',
       re: 'CP2 — Blueprint 승인',
+      content: 'Blueprint 승인. 조이에게 시각 시안 작성을 요청합니다.',
+    })
+    // 이제 COMPLETED 대신 JOI_DESIGNING으로 전이
+    await supabase.from('missions').update({
+      current_state: 'JOI_DESIGNING',
+      updated_at: new Date().toISOString(),
+    }).eq('id', mission.id)
+    return 'JOI_DESIGNING'
+  }
+
+  if (decision === 'revise') {
+    await supabase.from('messages').insert({
+      mission_id: mission.id,
+      sender: 'director',
+      type: 'UserInput',
+      re: 'CP2 — 수정 요청',
+      content: comments ?? '디렉터가 수정 요청',
+    })
+    await supabase.from('missions').update({
+      current_state: 'AKI_REVISING',
+      updated_at: new Date().toISOString(),
+    }).eq('id', mission.id)
+    return 'AKI_REVISING'
+  }
+
+  throw new Error(`알 수 없는 decision: ${decision}`)
+}
+
+async function handleCp3Decision(supabase: SbClient, mission: Mission, decision: string, comments?: string): Promise<string> {
+  if (mission.current_state !== 'WAITING_CP3') {
+    throw new Error(`CP3 결정은 WAITING_CP3 상태에서만 가능 (현재: ${mission.current_state})`)
+  }
+
+  if (decision === 'approve') {
+    await supabase.from('messages').insert({
+      mission_id: mission.id,
+      sender: 'director',
+      type: 'Approval',
+      re: 'CP3 — 디자인 시안 승인',
       content: '최종 승인. 미션 완료.',
     })
     await supabase.from('missions').update({
@@ -673,14 +827,14 @@ async function handleCp2Decision(supabase: SbClient, mission: Mission, decision:
       mission_id: mission.id,
       sender: 'director',
       type: 'UserInput',
-      re: 'CP2 — 수정 요청',
-      content: comments ?? '디렉터가 수정 요청',
+      re: 'CP3 — 디자인 수정 요청',
+      content: comments ?? '디렉터가 디자인 수정 요청',
     })
     await supabase.from('missions').update({
-      current_state: 'AKI_REVISING',
+      current_state: 'JOI_REVISING',
       updated_at: new Date().toISOString(),
     }).eq('id', mission.id)
-    return 'AKI_REVISING'
+    return 'JOI_REVISING'
   }
 
   throw new Error(`알 수 없는 decision: ${decision}`)
@@ -717,6 +871,8 @@ Deno.serve(async (req) => {
       newState = await handleCp1Decision(supabase, mission, selected_candidate_index)
     } else if (action === 'cp2') {
       newState = await handleCp2Decision(supabase, mission, decision, comments)
+    } else if (action === 'cp3') {
+      newState = await handleCp3Decision(supabase, mission, decision, comments)
     } else {
       // 자동 진행 (상태 기반)
       switch (mission.current_state) {
@@ -734,8 +890,13 @@ Deno.serve(async (req) => {
         case 'AKI_REVISING':
           newState = await handleAkiDesigning(supabase, mission)
           break
+        case 'JOI_DESIGNING':
+        case 'JOI_REVISING':
+          newState = await handleJoiDesigning(supabase, mission)
+          break
         case 'WAITING_CP1':
         case 'WAITING_CP2':
+        case 'WAITING_CP3':
         case 'COMPLETED':
         case 'ERROR_STATE':
           return jsonResp({ ok: true, note: 'No-op for state', state: mission.current_state }, 200)

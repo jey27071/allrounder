@@ -14,12 +14,15 @@ export type MissionState =
   | 'AKI_DESIGNING'
   | 'WAITING_CP2'
   | 'AKI_REVISING'
+  | 'JOI_DESIGNING'
+  | 'WAITING_CP3'
+  | 'JOI_REVISING'
   | 'COMPLETED'
   | 'ERROR_STATE'
 
-export type AgentId = 'jarvis' | 'lumi' | 'aki'
+export type AgentId = 'jarvis' | 'lumi' | 'aki' | 'joi'
 
-export type MessageSender = 'director' | 'jarvis' | 'lumi' | 'aki' | 'system'
+export type MessageSender = 'director' | 'jarvis' | 'lumi' | 'aki' | 'joi' | 'system'
 
 export type MessageType =
   | 'Deliverable'
@@ -30,7 +33,7 @@ export type MessageType =
   | 'UserInput'
   | 'StatusUpdate'
 
-export type DeliverableType = 'opportunity_map' | 'product_blueprint'
+export type DeliverableType = 'opportunity_map' | 'product_blueprint' | 'screen_designs'
 
 export type DeliverableStatus = 'pending' | 'approved' | 'rejected' | 'revised' | 'final'
 

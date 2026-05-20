@@ -28,7 +28,9 @@ export const WORKFLOW_STEPS: WorkflowStep[] = [
   { key: 'AKI_REVIEW', label: '아키 — 검수', agent: 'aki' },
   { key: 'CP1', label: 'CP1 후보 선택' },
   { key: 'AKI_DESIGN', label: '아키 — 설계', agent: 'aki' },
-  { key: 'CP2', label: 'CP2 최종 검토' },
+  { key: 'CP2', label: 'CP2 Blueprint 검토' },
+  { key: 'JOI', label: '조이 — 디자인 시안', agent: 'joi' },
+  { key: 'CP3', label: 'CP3 최종 검토' },
 ]
 
 /**
@@ -50,8 +52,13 @@ export function stateToStepIndex(state: MissionState): number {
       return 4
     case 'WAITING_CP2':
       return 5
-    case 'COMPLETED':
+    case 'JOI_DESIGNING':
+    case 'JOI_REVISING':
       return 6
+    case 'WAITING_CP3':
+      return 7
+    case 'COMPLETED':
+      return 8
     case 'ERROR_STATE':
       return -1
     default:

@@ -6,6 +6,7 @@ import type { Mission, Message, MissionState } from '@/types/app'
 import MessageBubble from './MessageBubble'
 import Cp1Modal from './Cp1Modal'
 import Cp2Modal from './Cp2Modal'
+import Cp3Modal from './Cp3Modal'
 
 interface MissionChatProps {
   mission: Mission
@@ -17,6 +18,8 @@ const PROGRESS_BUTTON_LABELS: Partial<Record<MissionState, string>> = {
   AKI_REVIEWING: '▶ 아키에게 검수 진행시키기',
   AKI_DESIGNING: '▶ 아키에게 Blueprint 작성시키기',
   AKI_REVISING: '▶ 아키에게 수정 요청',
+  JOI_DESIGNING: '▶ 조이에게 디자인 시안 작성시키기',
+  JOI_REVISING: '▶ 조이에게 디자인 수정 요청',
 }
 
 const PROGRESS_BUTTON_COLOR: Partial<Record<MissionState, string>> = {
@@ -25,6 +28,8 @@ const PROGRESS_BUTTON_COLOR: Partial<Record<MissionState, string>> = {
   AKI_REVIEWING: 'bg-agent-aki',
   AKI_DESIGNING: 'bg-agent-aki',
   AKI_REVISING: 'bg-agent-aki',
+  JOI_DESIGNING: 'bg-agent-joi',
+  JOI_REVISING: 'bg-agent-joi',
 }
 
 export default function MissionChat({ mission }: MissionChatProps) {
@@ -34,6 +39,7 @@ export default function MissionChat({ mission }: MissionChatProps) {
   const [progressError, setProgressError] = useState<string | null>(null)
   const [showCp1, setShowCp1] = useState(false)
   const [showCp2, setShowCp2] = useState(false)
+  const [showCp3, setShowCp3] = useState(false)
 
   const progressLabel = PROGRESS_BUTTON_LABELS[mission.current_state]
   const progressColor = PROGRESS_BUTTON_COLOR[mission.current_state] ?? 'bg-primary'
@@ -42,6 +48,7 @@ export default function MissionChat({ mission }: MissionChatProps) {
   useEffect(() => {
     if (mission.current_state === 'WAITING_CP1') setShowCp1(true)
     if (mission.current_state === 'WAITING_CP2') setShowCp2(true)
+    if (mission.current_state === 'WAITING_CP3') setShowCp3(true)
   }, [mission.current_state])
 
   useEffect(() => {
@@ -145,6 +152,15 @@ export default function MissionChat({ mission }: MissionChatProps) {
           </button>
         )}
 
+        {mission.current_state === 'WAITING_CP3' && !showCp3 && (
+          <button
+            onClick={() => setShowCp3(true)}
+            className="w-full mb-3 px-4 py-2.5 text-sm font-medium rounded bg-primary text-white hover:opacity-90"
+          >
+            ★ CP3 — 디자인 시안 검토 다시 열기
+          </button>
+        )}
+
         {mission.current_state === 'COMPLETED' && (
           <div className="mb-3 p-3 bg-success/10 border border-success/30 rounded text-sm text-success text-center">
             ✓ 미션 완료
@@ -174,6 +190,7 @@ export default function MissionChat({ mission }: MissionChatProps) {
 
       {showCp1 && <Cp1Modal mission={mission} onClose={() => setShowCp1(false)} />}
       {showCp2 && <Cp2Modal mission={mission} onClose={() => setShowCp2(false)} />}
+      {showCp3 && <Cp3Modal mission={mission} onClose={() => setShowCp3(false)} />}
     </div>
   )
 }

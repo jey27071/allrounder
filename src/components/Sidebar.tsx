@@ -62,6 +62,10 @@ export default function Sidebar({ currentPage, onNavigate, onNewMission }: Sideb
           <span className="w-2 h-2 rounded-full bg-agent-aki" />
           <span>Aki</span>
         </div>
+        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+          <span className="w-2 h-2 rounded-full bg-agent-joi" />
+          <span>Joi</span>
+        </div>
       </div>
     </aside>
   )

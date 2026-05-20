@@ -12,7 +12,7 @@ export interface OrchestrateResponse {
 
 interface OrchestratePayload {
   mission_id: string
-  action?: 'cp1' | 'cp2'
+  action?: 'cp1' | 'cp2' | 'cp3'
   selected_candidate_index?: number
   decision?: 'approve' | 'revise' | 'branch'
   comments?: string
@@ -69,6 +69,20 @@ export async function decideCp2(
   return callOrchestrate({
     mission_id: missionId,
     action: 'cp2',
+    decision,
+    comments,
+  })
+}
+
+/** CP3 — Joi 디자인 시안 결정 */
+export async function decideCp3(
+  missionId: string,
+  decision: 'approve' | 'revise',
+  comments?: string,
+): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'cp3',
     decision,
     comments,
   })

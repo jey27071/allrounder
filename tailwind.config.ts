@@ -14,6 +14,7 @@ export default {
           jarvis: '#2D3E50',
           lumi: '#7B6FB8',
           aki: '#5C8A6E',
+          joi: '#C77B5C',
         },
       },
       fontFamily: {
