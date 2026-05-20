@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { listWisdom, setWisdomActive } from '@/lib/wisdom'
+import { listWisdom, setWisdomActive, triggerWisdomExtraction, type ExtractWisdomResult } from '@/lib/wisdom'
 import type { AgentId, WisdomPrinciple } from '@/types/app'
 import WisdomFormModal from '@/components/WisdomFormModal'
 
@@ -36,6 +36,8 @@ export default function AgentsPage() {
   const [includeInactive, setIncludeInactive] = useState(false)
   const [showWisdomForm, setShowWisdomForm] = useState(false)
   const [editingWisdom, setEditingWisdom] = useState<WisdomPrinciple | null>(null)
+  const [extracting, setExtracting] = useState(false)
+  const [extractResult, setExtractResult] = useState<ExtractWisdomResult | null>(null)
 
   useEffect(() => {
     void loadData()
@@ -93,6 +95,23 @@ export default function AgentsPage() {
 
   function handleSavedForm() {
     void loadData()
+  }
+
+  async function handleExtract() {
+    if (extracting) return
+    if (!confirm('Jarvis가 누적된 다이어리를 분석하여 지혜 후보를 추출합니다. 진행할까요?')) return
+    setExtracting(true)
+    setExtractResult(null)
+    const result = await triggerWisdomExtraction()
+    setExtractResult(result)
+    setExtracting(false)
+    if (result.ok) {
+      // 후보가 생성됐으면 비활성 지혜도 보이도록 전환
+      if ((result.candidates_created ?? 0) > 0) {
+        setIncludeInactive(true)
+      }
+      void loadData()
+    }
   }
 
   if (loading) {
@@ -160,13 +179,48 @@ export default function AgentsPage() {
             전체
           </button>
         </div>
-        <button
-          onClick={handleAdd}
-          className="text-sm px-3 py-1.5 rounded bg-primary text-white hover:opacity-90"
-        >
-          + 지혜 추가
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void handleExtract()}
+            disabled={extracting}
+            className="text-sm px-3 py-1.5 rounded border border-border bg-white hover:bg-gray-50 disabled:opacity-50"
+            title="Jarvis가 누적 다이어리에서 지혜 후보를 추출합니다"
+          >
+            {extracting ? '⏳ 추출 중...' : '🔍 다이어리에서 추출'}
+          </button>
+          <button
+            onClick={handleAdd}
+            className="text-sm px-3 py-1.5 rounded bg-primary text-white hover:opacity-90"
+          >
+            + 지혜 추가
+          </button>
+        </div>
       </div>
+
+      {extractResult && (
+        <div className="mb-4 max-w-5xl">
+          {extractResult.ok ? (
+            <div className="p-3 bg-success/10 border border-success/30 rounded text-sm text-success">
+              ✓ 추출 완료 · 후보 {extractResult.candidates_created ?? 0}건 생성
+              {extractResult.total_diaries_considered != null &&
+                ` · 분석 다이어리 ${extractResult.total_diaries_considered}개`}
+              {extractResult.raw_candidates != null &&
+                extractResult.raw_candidates > (extractResult.candidates_created ?? 0) &&
+                ` (검증 실패 ${extractResult.raw_candidates - (extractResult.candidates_created ?? 0)}건 제외)`}
+              {extractResult.note && <div className="mt-1 text-xs">{extractResult.note}</div>}
+              {(extractResult.candidates_created ?? 0) > 0 && (
+                <div className="mt-1 text-xs">
+                  ⚠ 후보는 비활성 상태로 저장됩니다. "전체" 필터로 검토 후 "활성화"하세요.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-3 bg-warning/10 border border-warning/30 rounded text-sm text-warning">
+              ⚠ 추출 실패: {extractResult.error ?? '알 수 없는 오류'}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-[240px_1fr] gap-6 max-w-5xl">
         {/* Agent List */}

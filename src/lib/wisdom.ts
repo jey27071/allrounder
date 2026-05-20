@@ -1,5 +1,44 @@
-import { supabase } from '@/lib/supabase'
+import { supabase, SUPABASE_URL } from '@/lib/supabase'
 import type { WisdomPrinciple, AgentId } from '@/types/app'
+
+export interface ExtractWisdomResult {
+  ok: boolean
+  candidates_created?: number
+  total_diaries_considered?: number
+  raw_candidates?: number
+  note?: string
+  error?: string
+}
+
+/**
+ * Jarvis가 누적 다이어리에서 지혜 후보를 추출.
+ * 후보는 wisdom_principles에 active=false로 저장되어 디렉터 검토 대기.
+ */
+export async function triggerWisdomExtraction(): Promise<ExtractWisdomResult> {
+  if (!supabase || !SUPABASE_URL) return { ok: false, error: 'Supabase 미설정' }
+
+  const url = `${SUPABASE_URL}/functions/v1/orchestrate`
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${anonKey}`,
+        apikey: anonKey,
+      },
+      body: JSON.stringify({ action: 'extract_wisdom' }),
+    })
+    const data = (await response.json()) as ExtractWisdomResult
+    if (!response.ok) {
+      return { ok: false, error: data.error ?? 'Extraction failed' }
+    }
+    return data
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+}
 
 export interface WisdomInput {
   title: string

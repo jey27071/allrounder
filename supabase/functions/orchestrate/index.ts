@@ -1025,6 +1025,111 @@ async function handleCp3Decision(supabase: SbClient, mission: Mission, decision:
 }
 
 // ============================================================
+// 인공 지혜 추출 (글로벌 액션)
+// ============================================================
+
+async function handleExtractWisdom(supabase: SbClient): Promise<{
+  candidates_created: number
+  total_diaries_considered: number
+  raw_candidates: number
+  note?: string
+}> {
+  // 1. 최근 다이어리 가져오기
+  const { data: diaries } = await supabase
+    .from('diaries')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  // 2. 이미 source로 사용된 diary ID 추적
+  const { data: existingWisdoms } = await supabase
+    .from('wisdom_principles')
+    .select('source_diary_ids')
+
+  const usedIds = new Set<string>()
+  for (const w of existingWisdoms ?? []) {
+    for (const id of (w.source_diary_ids ?? [])) usedIds.add(id)
+  }
+
+  const newDiaries = (diaries ?? []).filter((d: { id: string }) => !usedIds.has(d.id))
+
+  if (newDiaries.length < 3) {
+    return {
+      candidates_created: 0,
+      total_diaries_considered: newDiaries.length,
+      raw_candidates: 0,
+      note: '추출에 필요한 신규 다이어리가 부족합니다 (최소 3개)',
+    }
+  }
+
+  // 3. Jarvis 호출
+  const systemPrompt = await loadAgentPrompt(supabase, 'jarvis')
+  const userPrompt = `당신은 조직의 지혜 큐레이터입니다. 아래 ${newDiaries.length}개의 에이전트 다이어리를 분석하여, 향후 모든 미션에 적용할 가치가 있는 "인공 지혜 원리(Wisdom Principles)"를 추출하세요.
+
+[다이어리 목록]
+${newDiaries.map((d: { id: string; agent_id: string; context_label: string | null; difficulty: string | null; insight: string | null; next_try: string | null }, i: number) => `
+${i + 1}. [${d.agent_id}] ${d.context_label ?? ''} (id: ${d.id})
+   - 난점: ${d.difficulty ?? '-'}
+   - 통찰: ${d.insight ?? '-'}
+   - 다음 시도: ${d.next_try ?? '-'}
+`).join('\n')}
+
+[출력 형식 — JSON]
+{
+  "candidates": [
+    {
+      "title": "원리 제목 (15자 이내, 비유·은유 권장)",
+      "description": "원리 설명 (200자 이상): 본질·위반 시 문제·적용 예시 포함",
+      "applies_to": ["aki", "lumi"],
+      "source_diary_ids": ["UUID", "UUID"],
+      "reasoning": "왜 이게 원리인지 (큐레이션용)"
+    }
+  ]
+}
+
+[추출 원칙]
+- 2개 이상 다이어리에서 공통 패턴이 보일 때만 원리화
+- 너무 일반적인 조언("잘하라", "꼼꼼하게") 금지
+- 부정문("X 하지 마라")보다는 긍정문("Y를 추구하라") 선호
+- applies_to는 다이어리에 등장한 agent_id만 선택, 또는 명백히 일반화 가능하면 다수 에이전트
+- 후보가 없으면 candidates: [] 반환 (강제로 만들지 않음)
+- 너무 좁은 1회성 사건은 원리화 부적합`
+
+  const response = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: 'gemini-2.5-pro',
+    temperature: 0.4,
+    jsonMode: true,
+  })
+
+  // deno-lint-ignore no-explicit-any
+  const parsed: any = parseLooseJson(response)
+  const rawCandidates = Array.isArray(parsed?.candidates) ? parsed.candidates : []
+
+  let inserted = 0
+  for (const c of rawCandidates) {
+    if (!c.title || !c.description || !Array.isArray(c.applies_to) || c.applies_to.length === 0) continue
+    const sourceIds = Array.isArray(c.source_diary_ids) ? c.source_diary_ids : []
+    const { error } = await supabase.from('wisdom_principles').insert({
+      title: c.title,
+      description: c.description,
+      applies_to: c.applies_to,
+      source_diary_ids: sourceIds,
+      version: 'candidate',
+      active: false,
+    })
+    if (!error) inserted += 1
+  }
+
+  return {
+    candidates_created: inserted,
+    total_diaries_considered: newDiaries.length,
+    raw_candidates: rawCandidates.length,
+  }
+}
+
+// ============================================================
 // 메인 핸들러
 // ============================================================
 
@@ -1037,6 +1142,12 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json()
     const { mission_id, action, selected_candidate_index, decision, comments, specialist_id } = body
+
+    // 글로벌 액션 — mission_id 불필요
+    if (action === 'extract_wisdom') {
+      const result = await handleExtractWisdom(supabase)
+      return jsonResp({ ok: true, ...result }, 200)
+    }
 
     if (!mission_id) return jsonResp({ error: 'mission_id required' }, 400)
 
