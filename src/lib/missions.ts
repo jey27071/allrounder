@@ -73,6 +73,30 @@ export async function getMission(missionId: string): Promise<Mission | null> {
   return data as Mission
 }
 
+export async function sendDirectorMessage(
+  missionId: string,
+  content: string,
+  to: string,
+  cc: string[] = [],
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+
+  const { error } = await supabase.from('messages').insert({
+    mission_id: missionId,
+    sender: 'director',
+    recipient: to,
+    cc: cc.length > 0 ? cc : null,
+    type: 'UserInput',
+    content,
+  })
+
+  if (error) {
+    console.error('디렉터 메시지 전송 실패:', error)
+    return { ok: false, error: error.message }
+  }
+  return { ok: true }
+}
+
 export async function listMessages(missionId: string): Promise<Message[]> {
   if (!supabase) return []
 

@@ -24,7 +24,7 @@ function App() {
       <div className="grid grid-cols-[240px_1fr_320px] h-screen overflow-hidden">
         <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} onNewMission={handleNewMission} />
 
-        <div className="overflow-hidden">
+        <div className="overflow-hidden h-screen flex flex-col">
           {currentPage === 'missions' && (
             <MissionsPage
               onMissionChange={setActiveMission}

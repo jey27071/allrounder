@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { listMessages } from '@/lib/missions'
-import { orchestrate } from '@/lib/orchestrate'
-import type { Mission, Message, MissionState } from '@/types/app'
+import { listMessages, sendDirectorMessage } from '@/lib/missions'
+import { orchestrate, invokeSpecialist } from '@/lib/orchestrate'
+import type { Mission, Message, MissionState, AgentId } from '@/types/app'
 import MessageBubble from './MessageBubble'
 import Cp1Modal from './Cp1Modal'
 import Cp2Modal from './Cp2Modal'
@@ -33,6 +33,23 @@ const PROGRESS_BUTTON_COLOR: Partial<Record<MissionState, string>> = {
   JOI_REVISING: 'bg-agent-joi',
 }
 
+type Recipient = AgentId
+
+const RECIPIENT_OPTIONS: { id: Recipient; label: string; kind: 'core' | 'specialist' }[] = [
+  { id: 'jarvis', label: 'Jarvis (자동 진행)', kind: 'core' },
+  { id: 'lumi', label: 'Lumi (리서치)', kind: 'core' },
+  { id: 'aki', label: 'Aki (설계)', kind: 'core' },
+  { id: 'joi', label: 'Joi (디자인)', kind: 'core' },
+  { id: 'friday', label: 'Friday (사업화)', kind: 'specialist' },
+  { id: 'tars', label: 'TARS (React 코드)', kind: 'specialist' },
+  { id: 'echo', label: 'Echo (접근성)', kind: 'specialist' },
+  { id: 'kitt', label: 'KITT (법무)', kind: 'specialist' },
+  { id: 'ethica', label: 'Ethica (윤리)', kind: 'specialist' },
+  { id: 'qa_bot', label: 'QA봇 (테스트)', kind: 'specialist' },
+]
+
+const SPECIALIST_IDS: Recipient[] = ['friday', 'tars', 'echo', 'kitt', 'ethica', 'qa_bot']
+
 export default function MissionChat({ mission }: MissionChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,6 +58,13 @@ export default function MissionChat({ mission }: MissionChatProps) {
   const [showCp1, setShowCp1] = useState(false)
   const [showCp2, setShowCp2] = useState(false)
   const [showCp3, setShowCp3] = useState(false)
+
+  const [input, setInput] = useState('')
+  const [to, setTo] = useState<Recipient>('jarvis')
+  const [cc, setCc] = useState<Recipient[]>([])
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [showCcPicker, setShowCcPicker] = useState(false)
 
   const progressLabel = PROGRESS_BUTTON_LABELS[mission.current_state]
   const progressColor = PROGRESS_BUTTON_COLOR[mission.current_state] ?? 'bg-primary'
@@ -57,7 +81,6 @@ export default function MissionChat({ mission }: MissionChatProps) {
 
     if (!supabase) return
 
-    // Realtime: 새 메시지 도착 시 자동 append
     const channel = supabase
       .channel(`mission-${mission.id}`)
       .on(
@@ -70,7 +93,7 @@ export default function MissionChat({ mission }: MissionChatProps) {
         },
         (payload) => {
           setMessages((prev) => [...prev, payload.new as Message])
-        }
+        },
       )
       .subscribe()
 
@@ -95,19 +118,56 @@ export default function MissionChat({ mission }: MissionChatProps) {
     setProgressing(false)
   }
 
+  function toggleCc(id: Recipient) {
+    setCc((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]))
+  }
+
+  async function handleSend() {
+    const text = input.trim()
+    if (!text || sending) return
+    setSending(true)
+    setSendError(null)
+
+    // 1) 메시지 저장 (TO/CC 메타 포함)
+    const filteredCc = cc.filter((c) => c !== to)
+    const result = await sendDirectorMessage(mission.id, text, to, filteredCc)
+    if (!result.ok) {
+      setSendError(result.error ?? '전송 실패')
+      setSending(false)
+      return
+    }
+
+    setInput('')
+    setCc([])
+
+    // 2) TO 에이전트에 따라 자동 응답 트리거
+    if (SPECIALIST_IDS.includes(to)) {
+      void invokeSpecialist(mission.id, to)
+    } else {
+      // jarvis/lumi/aki/joi → orchestrate (Jarvis가 컨텍스트 기반으로 라우팅)
+      void orchestrate(mission.id)
+    }
+
+    setSending(false)
+  }
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="border-b border-border p-5">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="border-b border-border p-5 shrink-0">
         <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
           <span className="px-2 py-0.5 bg-gray-100 rounded">
-            {mission.status === 'in_progress' ? '⏳ 진행 중' : mission.status === 'completed' ? '✅ 완료' : mission.status}
+            {mission.status === 'in_progress'
+              ? '⏳ 진행 중'
+              : mission.status === 'completed'
+                ? '✅ 완료'
+                : mission.status}
           </span>
           <span>{mission.domain}</span>
         </div>
         <h2 className="text-lg font-bold">{mission.title}</h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
         {loading ? (
           <div className="text-sm text-gray-500">불러오는 중...</div>
         ) : messages.length === 0 ? (
@@ -117,7 +177,7 @@ export default function MissionChat({ mission }: MissionChatProps) {
         )}
       </div>
 
-      <div className="border-t border-border p-4">
+      <div className="border-t border-border p-4 shrink-0">
         {canProgress && (
           <div className="mb-3">
             <button
@@ -173,17 +233,108 @@ export default function MissionChat({ mission }: MissionChatProps) {
             ⚠ 반려 사이클 한도 도달. 디렉터 개입 필요.
           </div>
         )}
+
+        {/* TO / CC selector */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <label className="text-xs text-gray-500 shrink-0">TO</label>
+          <select
+            value={to}
+            onChange={(e) => setTo(e.target.value as Recipient)}
+            className="border border-border rounded px-2 py-1 text-xs bg-white"
+          >
+            {RECIPIENT_OPTIONS.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => setShowCcPicker((v) => !v)}
+            className="text-xs text-gray-500 hover:text-primary border border-border rounded px-2 py-1"
+          >
+            CC {cc.length > 0 ? `(${cc.length})` : ''}
+          </button>
+          {cc.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {cc.map((c) => {
+                const opt = RECIPIENT_OPTIONS.find((o) => o.id === c)
+                return (
+                  <span
+                    key={c}
+                    className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded inline-flex items-center gap-1"
+                  >
+                    {opt?.label.split(' ')[0]}
+                    <button
+                      onClick={() => toggleCc(c)}
+                      className="text-gray-400 hover:text-gray-700"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {showCcPicker && (
+          <div className="mb-2 p-2 border border-border rounded bg-gray-50">
+            <div className="text-xs text-gray-500 mb-1">CC 대상 선택 (TO 제외)</div>
+            <div className="flex flex-wrap gap-1">
+              {RECIPIENT_OPTIONS.filter((o) => o.id !== to).map((o) => {
+                const selected = cc.includes(o.id)
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => toggleCc(o.id)}
+                    className={`text-[10px] px-2 py-1 rounded border transition ${
+                      selected
+                        ? 'border-primary bg-primary text-white'
+                        : 'border-border bg-white text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="메시지 입력 (자비스와 직접 대화는 다음 단계에서)"
-            disabled
-            className="flex-1 border border-border rounded px-3 py-2 text-sm bg-gray-50 placeholder-gray-400 cursor-not-allowed"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void handleSend()
+              }
+            }}
+            placeholder={
+              to === 'jarvis'
+                ? '메시지 입력 (Enter로 전송) — Jarvis가 컨텍스트 기반 처리'
+                : `${RECIPIENT_OPTIONS.find((o) => o.id === to)?.label}에게 보낼 메시지`
+            }
+            disabled={sending}
+            className="flex-1 border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-primary disabled:bg-gray-50"
           />
-          <button disabled className="px-4 py-2 text-sm rounded bg-primary text-white opacity-50 cursor-not-allowed">
-            ↑
+          <button
+            onClick={() => void handleSend()}
+            disabled={sending || !input.trim()}
+            className="px-4 py-2 text-sm rounded bg-primary text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {sending ? '⏳' : '↑'}
           </button>
         </div>
+
+        {sendError && (
+          <div className="mt-2 p-2 bg-warning/10 border border-warning/30 rounded text-xs text-warning">
+            ⚠ {sendError}
+          </div>
+        )}
+
         <div className="text-xs text-gray-400 mt-2">
           현재 상태: <span className="font-mono">{mission.current_state}</span>
         </div>

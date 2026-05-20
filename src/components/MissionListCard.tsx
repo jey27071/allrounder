@@ -17,7 +17,7 @@ const STATUS_BADGE: Record<string, { label: string; color: string }> = {
 export default function MissionListCard({ mission, isSelected, onClick }: MissionListCardProps) {
   const badge = STATUS_BADGE[mission.status] ?? STATUS_BADGE.pending
   const date = new Date(mission.created_at)
-  const dateLabel = `${date.getMonth() + 1}/${date.getDate()}`
+  const dateLabel = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 
   return (
     <button

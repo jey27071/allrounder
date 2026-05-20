@@ -25,6 +25,13 @@ const COLOR_CLASS: Record<AgentId, string> = {
   jarvis: 'bg-agent-jarvis',
   lumi: 'bg-agent-lumi',
   aki: 'bg-agent-aki',
+  joi: 'bg-agent-joi',
+  friday: 'bg-agent-friday',
+  tars: 'bg-agent-tars',
+  echo: 'bg-agent-echo',
+  kitt: 'bg-agent-kitt',
+  ethica: 'bg-agent-ethica',
+  qa_bot: 'bg-agent-qa',
 }
 
 export default function AgentsPage() {
@@ -103,7 +110,7 @@ export default function AgentsPage() {
   const relatedWisdom = wisdom.filter((w) => w.applies_to.includes(selectedAgent.id))
 
   return (
-    <main className="p-10 overflow-y-auto">
+    <main className="flex-1 min-h-0 overflow-y-auto p-10">
       <h1 className="text-2xl font-bold mb-2">에이전트</h1>
       <p className="text-gray-500 text-sm mb-8">
         팀의 페르소나·시스템 프롬프트·누적 지혜를 관리합니다.
