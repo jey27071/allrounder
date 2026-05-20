@@ -38,6 +38,7 @@ export type Database = {
   public: {
     Tables: {
       missions: {
+        Relationships: []
         Row: {
           id: string
           title: string
