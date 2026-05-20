@@ -14,24 +14,31 @@ const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!
 
 // ============================================================
-// 견고한 JSON 파서 (마크다운 fence 제거, 첫 { ~ 마지막 } 추출)
+// 견고한 JSON 파서 (마크다운 fence 제거 + 자동 수리)
 // ============================================================
+
+// Gemini가 자주 누락하는 패턴: 속성명 앞 " 빠짐
+//   예: `,\n  why_now":` → `,\n  "why_now":`
+function repairJson(text: string): string {
+  // 1) 객체/콤마/배열 뒤 공백 + 영문/언더스코어로 시작하는 키" 패턴 → " 추가
+  return text.replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*":/g, '$1"$2":')
+}
 
 // deno-lint-ignore no-explicit-any
 function parseLooseJson(text: string): any | null {
   if (!text) return null
   let cleaned = text.trim()
-  // 마크다운 fence 제거
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '')
-  // 첫 { 부터 마지막 } 까지 추출
   const firstBrace = cleaned.indexOf('{')
   const lastBrace = cleaned.lastIndexOf('}')
   if (firstBrace >= 0 && lastBrace > firstBrace) {
     cleaned = cleaned.slice(firstBrace, lastBrace + 1)
   }
-  try {
-    return JSON.parse(cleaned)
-  } catch (_e) {
+  // 1차: 그대로 시도
+  try { return JSON.parse(cleaned) } catch (_e) { /* fall through */ }
+  // 2차: 수리 시도
+  try { return JSON.parse(repairJson(cleaned)) } catch (e) {
+    console.error('JSON parse failed even after repair:', e)
     return null
   }
 }
