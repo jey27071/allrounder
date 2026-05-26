@@ -20,15 +20,22 @@ export type MissionState =
   | 'COMPLETED'
   | 'ERROR_STATE'
 
-export type AgentId =
+/**
+ * Built-in 에이전트 ID (시드되는 10명).
+ * 커스텀 에이전트는 임의의 문자열 ID를 가질 수 있으므로
+ * 일반 코드에서는 AgentId(=string)를 사용한다.
+ */
+export type BuiltinAgentId =
   | 'jarvis' | 'lumi' | 'aki' | 'joi'
   | 'friday' | 'tars' | 'echo' | 'kitt' | 'ethica' | 'qa_bot'
 
-export type MessageSender =
-  | 'director'
-  | 'jarvis' | 'lumi' | 'aki' | 'joi'
-  | 'friday' | 'tars' | 'echo' | 'kitt' | 'ethica' | 'qa_bot'
-  | 'system'
+/**
+ * 일반 에이전트 ID — 빌트인 + 사용자가 추가한 커스텀 에이전트.
+ * DB 측 CHECK는 형식만 강제(/^[a-z][a-z0-9_]{1,31}$/).
+ */
+export type AgentId = BuiltinAgentId | (string & {})
+
+export type MessageSender = 'director' | 'system' | AgentId
 
 export type MessageType =
   | 'Deliverable'
@@ -42,6 +49,7 @@ export type MessageType =
 export type DeliverableType =
   | 'opportunity_map' | 'product_blueprint' | 'screen_designs'
   | 'business_model' | 'frontend_code' | 'a11y_audit' | 'legal_review' | 'ethics_review' | 'test_suite'
+  | 'custom_report'
 
 export type DeliverableStatus = 'pending' | 'approved' | 'rejected' | 'revised' | 'final'
 
@@ -92,6 +100,10 @@ export type Database = {
           current_version: string
           system_prompt: string
           color_token: string
+          is_custom: boolean
+          description: string | null
+          model: string | null
+          deliverable_type: string | null
           updated_at: string
         }
         Insert: {
@@ -101,6 +113,10 @@ export type Database = {
           current_version?: string
           system_prompt: string
           color_token: string
+          is_custom?: boolean
+          description?: string | null
+          model?: string | null
+          deliverable_type?: string | null
           updated_at?: string
         }
         Update: Partial<Database['public']['Tables']['agents']['Insert']>
@@ -123,6 +139,54 @@ export type Database = {
           created_at?: string
         }
         Update: Partial<Database['public']['Tables']['agent_versions']['Insert']>
+      }
+      agent_knowledge: {
+        Row: {
+          id: string
+          agent_id: AgentId
+          title: string
+          content: string
+          source: string | null
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: AgentId
+          title: string
+          content: string
+          source?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['agent_knowledge']['Insert']>
+      }
+      agent_examples: {
+        Row: {
+          id: string
+          agent_id: AgentId
+          label: string | null
+          input: string
+          output: string
+          notes: string | null
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: AgentId
+          label?: string | null
+          input: string
+          output: string
+          notes?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['agent_examples']['Insert']>
       }
       messages: {
         Row: {

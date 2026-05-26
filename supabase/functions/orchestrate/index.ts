@@ -154,21 +154,77 @@ type Mission = any
 type SbClient = any
 
 async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<string> {
-  const { data: agent } = await supabase.from('agents').select('system_prompt').eq('id', agentId).single()
-  const { data: wisdoms } = await supabase
-    .from('wisdom_principles')
-    .select('title, description')
-    .contains('applies_to', [agentId])
-    .eq('active', true)
+  const [{ data: agent }, { data: wisdoms }, { data: knowledge }, { data: examples }] = await Promise.all([
+    supabase.from('agents').select('system_prompt').eq('id', agentId).single(),
+    supabase
+      .from('wisdom_principles')
+      .select('title, description')
+      .contains('applies_to', [agentId])
+      .eq('active', true),
+    supabase
+      .from('agent_knowledge')
+      .select('title, content, source')
+      .eq('agent_id', agentId)
+      .eq('active', true)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('agent_examples')
+      .select('label, input, output')
+      .eq('agent_id', agentId)
+      .eq('active', true)
+      .order('created_at', { ascending: true }),
+  ])
 
   let prompt = agent?.system_prompt ?? ''
+
   if (wisdoms && wisdoms.length > 0) {
     prompt += '\n\n# 적용 가능한 인공 지혜 (Learned Principles)\n'
     for (const w of wisdoms) {
       prompt += `- **${w.title}**: ${w.description}\n`
     }
   }
+
+  if (knowledge && knowledge.length > 0) {
+    prompt += '\n\n# 학습 자료 (Knowledge Base)\n'
+    for (const k of knowledge) {
+      prompt += `\n## ${k.title}${k.source ? ` _(출처: ${k.source})_` : ''}\n${k.content}\n`
+    }
+  }
+
+  if (examples && examples.length > 0) {
+    prompt += '\n\n# 예시 (Few-shot Examples)\n'
+    for (const ex of examples) {
+      prompt += `\n### ${ex.label ?? '예시'}\n`
+      prompt += `**입력:**\n${ex.input}\n\n`
+      prompt += `**기대 출력:**\n${ex.output}\n`
+    }
+  }
+
   return prompt
+}
+
+/** 커스텀 에이전트도 호출 가능하도록 fallback config 생성 */
+// deno-lint-ignore no-explicit-any
+async function resolveSpecialistConfig(supabase: SbClient, specialistId: string): Promise<any> {
+  // 빌트인 우선
+  if (SPECIALIST_CONFIG[specialistId]) return SPECIALIST_CONFIG[specialistId]
+
+  // DB에서 커스텀 에이전트 메타 조회
+  const { data } = await supabase
+    .from('agents')
+    .select('name, role, model, deliverable_type, is_custom')
+    .eq('id', specialistId)
+    .single()
+  if (!data) return null
+
+  return {
+    label: data.name ?? specialistId,
+    deliverableType: 'custom_report',
+    customDeliverableTag: data.deliverable_type ?? null,
+    model: data.model ?? 'gemini-2.5-flash',
+    needsBlueprint: false,
+    needsDesigns: false,
+  }
 }
 
 async function getLatestDeliverable(supabase: SbClient, missionId: string, type: string) {
@@ -920,7 +976,7 @@ async function handleSpecialistInvocation(
   mission: Mission,
   specialistId: string,
 ): Promise<string> {
-  const config = SPECIALIST_CONFIG[specialistId]
+  const config = await resolveSpecialistConfig(supabase, specialistId)
   if (!config) throw new Error(`Unknown specialist: ${specialistId}`)
 
   const systemPrompt = await loadAgentPrompt(supabase, specialistId)
@@ -965,6 +1021,8 @@ async function handleSpecialistInvocation(
     parsed = { error: 'parse_failed', raw: response }
   }
 
+  const md = renderSpecialistMarkdown(specialistId, parsed, config)
+
   // 메시지 저장
   await supabase.from('messages').insert({
     mission_id: mission.id,
@@ -972,8 +1030,12 @@ async function handleSpecialistInvocation(
     recipient: 'director',
     re: `${config.label} 보고서`,
     type: 'Deliverable',
-    content: renderSpecialistMarkdown(specialistId, parsed),
-    metadata: { format: config.deliverableType, parsed },
+    content: md,
+    metadata: {
+      format: config.deliverableType,
+      custom_tag: config.customDeliverableTag ?? null,
+      parsed,
+    },
   })
 
   // 산출물 저장
@@ -982,7 +1044,7 @@ async function handleSpecialistInvocation(
     type: config.deliverableType,
     version: 'v1.0',
     data: parsed,
-    raw_markdown: renderSpecialistMarkdown(specialistId, parsed),
+    raw_markdown: md,
     created_by: specialistId,
     status: 'final',
   })
@@ -1003,9 +1065,9 @@ async function handleSpecialistInvocation(
 }
 
 // deno-lint-ignore no-explicit-any
-function renderSpecialistMarkdown(specialistId: string, parsed: any): string {
+function renderSpecialistMarkdown(specialistId: string, parsed: any, configArg?: any): string {
   if (parsed.error) return `(파싱 실패)\n\n${parsed.raw ?? ''}`
-  const config = SPECIALIST_CONFIG[specialistId]
+  const config = configArg ?? SPECIALIST_CONFIG[specialistId] ?? { label: specialistId }
   let md = `## ${config.label} 보고서\n\n`
   // 일반화: 객체의 각 키를 섹션으로 렌더
   for (const [key, value] of Object.entries(parsed)) {

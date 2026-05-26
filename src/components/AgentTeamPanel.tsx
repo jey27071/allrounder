@@ -1,41 +1,83 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { invokeSpecialist, orchestrate } from '@/lib/orchestrate'
-import type { Mission, AgentId } from '@/types/app'
+import { listAgents } from '@/lib/agents'
+import { bgForToken } from '@/lib/agentColors'
+import type { Mission, AgentId, Agent } from '@/types/app'
 import { INVOKABLE_AGENTS, AGENT_COLORS, type AgentMeta } from '@/data/team'
 
 interface AgentTeamPanelProps {
   mission: Mission
 }
 
+interface InvokableEntry {
+  id: AgentId
+  name: string
+  label: string
+  description: string
+  kind: 'workflow' | 'invoke'
+  canInvoke: boolean
+  colorClass: string
+  isCustom: boolean
+}
+
 export default function AgentTeamPanel({ mission }: AgentTeamPanelProps) {
   const [invoking, setInvoking] = useState<AgentId | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [customAgents, setCustomAgents] = useState<Agent[]>([])
 
-  function canInvoke(meta: AgentMeta): boolean {
+  useEffect(() => {
+    if (expanded) {
+      void listAgents().then((all) => setCustomAgents(all.filter((a) => a.is_custom)))
+    }
+  }, [expanded])
+
+  function canInvokeMeta(meta: AgentMeta): boolean {
     if (meta.kind === 'invoke') return true
-    // workflow agent: 현재 미션 상태가 그 에이전트의 단계일 때만 호출 가능
     if (meta.kind === 'workflow' && meta.workflowStates) {
       return meta.workflowStates.includes(mission.current_state)
     }
     return false
   }
 
-  async function handleInvoke(meta: AgentMeta) {
-    if (!canInvoke(meta)) return
-    setInvoking(meta.id)
+  const entries: InvokableEntry[] = [
+    ...INVOKABLE_AGENTS.map((meta) => ({
+      id: meta.id,
+      name: meta.name,
+      label: meta.label,
+      description: meta.description,
+      kind: meta.kind === 'workflow' ? ('workflow' as const) : ('invoke' as const),
+      canInvoke: canInvokeMeta(meta),
+      colorClass: AGENT_COLORS[meta.id as keyof typeof AGENT_COLORS] ?? 'bg-gray-400',
+      isCustom: false,
+    })),
+    ...customAgents.map((a) => ({
+      id: a.id,
+      name: a.name,
+      label: a.role,
+      description: a.description ?? a.role,
+      kind: 'invoke' as const,
+      canInvoke: true,
+      colorClass: bgForToken(a.color_token),
+      isCustom: true,
+    })),
+  ]
+
+  async function handleInvoke(entry: InvokableEntry) {
+    if (!entry.canInvoke) return
+    setInvoking(entry.id)
     setError(null)
     const result =
-      meta.kind === 'workflow'
+      entry.kind === 'workflow'
         ? await orchestrate(mission.id)
-        : await invokeSpecialist(mission.id, meta.id)
+        : await invokeSpecialist(mission.id, entry.id)
     if (!result.ok) {
-      setError(`${meta.name} 호출 실패: ${result.error ?? result.detail ?? '알 수 없는 오류'}`)
+      setError(`${entry.name} 호출 실패: ${result.error ?? result.detail ?? '알 수 없는 오류'}`)
     }
     setInvoking(null)
   }
 
-  const invokingMeta = invoking ? INVOKABLE_AGENTS.find((a) => a.id === invoking) : null
+  const invokingMeta = invoking ? entries.find((a) => a.id === invoking) : null
 
   return (
     <div className="border-t border-border shrink-0">
@@ -45,7 +87,7 @@ export default function AgentTeamPanel({ mission }: AgentTeamPanelProps) {
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-gray-600">👥 팀원 호출</span>
-          <span className="text-[10px] text-gray-400">({INVOKABLE_AGENTS.length}명)</span>
+          <span className="text-[10px] text-gray-400">({entries.length}명)</span>
           {invokingMeta && (
             <span className="text-[10px] text-primary">⏳ {invokingMeta.name} 작업 중</span>
           )}
@@ -56,36 +98,36 @@ export default function AgentTeamPanel({ mission }: AgentTeamPanelProps) {
       {expanded && (
         <div className="p-3 border-t border-border bg-gray-50/50">
           <div className="grid grid-cols-3 gap-1.5">
-            {INVOKABLE_AGENTS.map((meta) => {
-              const isInvoking = invoking === meta.id
+            {entries.map((entry) => {
+              const isInvoking = invoking === entry.id
               const isAnyInvoking = invoking !== null
-              const canCall = canInvoke(meta)
-              const isWorkflow = meta.kind === 'workflow'
-              const disabled = isAnyInvoking || !canCall
+              const isWorkflow = entry.kind === 'workflow'
+              const disabled = isAnyInvoking || !entry.canInvoke
 
               return (
                 <button
-                  key={meta.id}
-                  onClick={() => void handleInvoke(meta)}
+                  key={entry.id}
+                  onClick={() => void handleInvoke(entry)}
                   disabled={disabled}
                   className="text-left p-2 rounded border border-border bg-white hover:border-primary transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-border"
                   title={
-                    canCall
-                      ? meta.description
-                      : isWorkflow
-                        ? `현재 ${mission.current_state} 단계에서는 호출 불가 (워크플로우 에이전트)`
-                        : meta.description
+                    entry.canInvoke
+                      ? entry.description
+                      : `현재 ${mission.current_state} 단계에서는 호출 불가 (워크플로우 에이전트)`
                   }
                 >
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className={`w-2 h-2 rounded-full ${AGENT_COLORS[meta.id]}`} />
-                    <span className="font-medium text-xs">{meta.name}</span>
+                    <span className={`w-2 h-2 rounded-full ${entry.colorClass}`} />
+                    <span className="font-medium text-xs">{entry.name}</span>
                     {isWorkflow && (
                       <span className="text-[8px] text-gray-400 ml-auto">자동</span>
                     )}
+                    {entry.isCustom && (
+                      <span className="text-[8px] text-primary ml-auto">★</span>
+                    )}
                   </div>
                   <div className="text-[10px] text-gray-500 truncate">
-                    {isInvoking ? '⏳' : meta.label}
+                    {isInvoking ? '⏳' : entry.label}
                   </div>
                 </button>
               )

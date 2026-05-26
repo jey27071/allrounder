@@ -2,16 +2,19 @@
  * 앱 내부에서 사용하는 데이터 타입 (DB 타입과 분리)
  */
 
-import type { Database, MissionStatus, MissionState, AgentId, MessageSender, MessageType } from './database'
+import type { Database, MissionStatus, MissionState, AgentId, BuiltinAgentId, MessageSender, MessageType } from './database'
 
 export type Mission = Database['public']['Tables']['missions']['Row']
 export type Message = Database['public']['Tables']['messages']['Row']
 export type Agent = Database['public']['Tables']['agents']['Row']
+export type AgentVersion = Database['public']['Tables']['agent_versions']['Row']
+export type AgentKnowledge = Database['public']['Tables']['agent_knowledge']['Row']
+export type AgentExample = Database['public']['Tables']['agent_examples']['Row']
 export type Deliverable = Database['public']['Tables']['deliverables']['Row']
 export type Diary = Database['public']['Tables']['diaries']['Row']
 export type WisdomPrinciple = Database['public']['Tables']['wisdom_principles']['Row']
 
-export type { MissionStatus, MissionState, AgentId, MessageSender, MessageType }
+export type { MissionStatus, MissionState, AgentId, BuiltinAgentId, MessageSender, MessageType }
 
 /**
  * 워크플로우 단계의 시각화 정의
