@@ -12,7 +12,7 @@ export interface OrchestrateResponse {
 
 interface OrchestratePayload {
   mission_id: string
-  action?: 'cp1' | 'cp2' | 'cp3' | 'specialist'
+  action?: 'cp1' | 'cp2' | 'cp3' | 'specialist' | 'generate_slides'
   selected_candidate_index?: number
   decision?: 'approve' | 'revise' | 'branch'
   comments?: string
@@ -98,5 +98,13 @@ export async function invokeSpecialist(
     mission_id: missionId,
     action: 'specialist',
     specialist_id: specialistId,
+  })
+}
+
+/** Opportunity Map을 슬라이드 deck으로 변환 (Phase 18) */
+export async function generateSlides(missionId: string): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'generate_slides',
   })
 }

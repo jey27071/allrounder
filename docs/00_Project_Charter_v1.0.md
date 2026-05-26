@@ -104,6 +104,14 @@
 
 ---
 
+- **Phase 18**: 루미(리서치) 고도화 — 요약 뷰 + 슬라이드 변환
+  - 마이그레이션: `supabase/migrations/009_slide_deck.sql` (deliverables.type에 'slide_deck' 추가)
+  - 루미 출력 JSON에 `tldr` 필드 강제 (Edge Function user prompt 수정, DB 재시드 불필요)
+  - `OpportunityMapSummary` 컴포넌트: 채팅의 Opportunity Map 메시지 위에 TL;DR + 5개 후보 점수 시각화 카드 표시
+  - Edge Function `handleGenerateSlides`: 액션 `generate_slides`로 호출, 현재 Opportunity Map을 8~12장 슬라이드 deck JSON으로 변환 (Gemini Pro)
+  - `SlideDeckViewer` 컴포넌트: 인앱 뷰어 (좌우 키 / 스페이스 네비, N 발표자 노트, P 인쇄→PDF, ESC 닫기). 6개 layout 지원(title, bullets, two_column, quote, metrics, comparison). `@media print` 로 PDF export 친화
+  - 트리거: 요약 카드의 "📊 슬라이드로 변환" 버튼 → 생성 완료되면 채팅에 slide_deck 메시지 + "슬라이드 보기" 버튼 추가
+
 - **Phase 17**: 에이전트별 디자인 시스템 학습·반영 (조이 우선)
   - 마이그레이션: `supabase/migrations/008_agent_design_systems.sql`
   - 라이브러리: `src/lib/designSystems.ts` (parseDesignTokensJson 포함)

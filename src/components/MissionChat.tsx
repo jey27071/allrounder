@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { listMessages, sendDirectorMessage } from '@/lib/missions'
-import { orchestrate, invokeSpecialist } from '@/lib/orchestrate'
+import { orchestrate, invokeSpecialist, generateSlides } from '@/lib/orchestrate'
 import type { Mission, Message, MissionState, AgentId } from '@/types/app'
 import MessageBubble from './MessageBubble'
 import Cp1Modal from './Cp1Modal'
 import Cp2Modal from './Cp2Modal'
 import Cp3Modal from './Cp3Modal'
 import AgentTeamPanel from './AgentTeamPanel'
+import OpportunityMapSummary from './OpportunityMapSummary'
+import SlideDeckViewer, { type SlideDeck } from './SlideDeckViewer'
 
 interface MissionChatProps {
   mission: Mission
@@ -66,6 +68,11 @@ export default function MissionChat({ mission }: MissionChatProps) {
   const [sendError, setSendError] = useState<string | null>(null)
   const [showCcPicker, setShowCcPicker] = useState(false)
 
+  // Phase 18: 슬라이드 변환 + 뷰어
+  const [convertingSlides, setConvertingSlides] = useState(false)
+  const [viewingDeck, setViewingDeck] = useState<SlideDeck | null>(null)
+  const [slidesError, setSlidesError] = useState<string | null>(null)
+
   const progressLabel = PROGRESS_BUTTON_LABELS[mission.current_state]
   const progressColor = PROGRESS_BUTTON_COLOR[mission.current_state] ?? 'bg-primary'
   const canProgress = progressLabel != null
@@ -116,6 +123,22 @@ export default function MissionChat({ mission }: MissionChatProps) {
       setProgressError(result.error ?? result.detail ?? '진행 실패')
     }
     setProgressing(false)
+  }
+
+  async function handleGenerateSlides() {
+    if (convertingSlides) return
+    if (!confirm('현재 Opportunity Map을 슬라이드 deck으로 변환합니다. (Gemini Pro 호출, 약 30~60초 소요)\n진행할까요?')) return
+    setConvertingSlides(true)
+    setSlidesError(null)
+    const result = await generateSlides(mission.id)
+    if (!result.ok) {
+      setSlidesError(result.error ?? result.detail ?? '슬라이드 변환 실패')
+    }
+    setConvertingSlides(false)
+  }
+
+  function handleViewDeck(deck: SlideDeck) {
+    setViewingDeck(deck)
   }
 
   function toggleCc(id: Recipient) {
@@ -173,7 +196,43 @@ export default function MissionChat({ mission }: MissionChatProps) {
         ) : messages.length === 0 ? (
           <div className="text-sm text-gray-500">아직 메시지가 없습니다.</div>
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+          messages.map((msg) => {
+            // deno-lint-ignore no-explicit-any
+            const meta = (msg.metadata ?? {}) as any
+            // Opportunity Map 메시지 → 요약 카드 위에 표시
+            if (meta.format === 'opportunity_map' && meta.parsed) {
+              return (
+                <div key={msg.id}>
+                  <OpportunityMapSummary
+                    data={meta.parsed}
+                    onConvertToSlides={() => void handleGenerateSlides()}
+                    converting={convertingSlides}
+                  />
+                  <MessageBubble message={msg} />
+                </div>
+              )
+            }
+            // Slide deck 메시지 → "보기" 버튼
+            if (meta.format === 'slide_deck' && meta.parsed) {
+              return (
+                <div key={msg.id}>
+                  <MessageBubble message={msg} />
+                  <button
+                    onClick={() => handleViewDeck(meta.parsed as SlideDeck)}
+                    className="ml-12 mt-1 text-xs px-3 py-1.5 rounded bg-primary text-white hover:opacity-90"
+                  >
+                    📊 슬라이드 보기 ({meta.parsed.slides?.length ?? 0}장)
+                  </button>
+                </div>
+              )
+            }
+            return <MessageBubble key={msg.id} message={msg} />
+          })
+        )}
+        {slidesError && (
+          <div className="p-2 bg-warning/10 border border-warning/30 rounded text-xs text-warning">
+            ⚠ {slidesError}
+          </div>
         )}
       </div>
 
@@ -345,6 +404,9 @@ export default function MissionChat({ mission }: MissionChatProps) {
       {showCp1 && <Cp1Modal mission={mission} onClose={() => setShowCp1(false)} />}
       {showCp2 && <Cp2Modal mission={mission} onClose={() => setShowCp2(false)} />}
       {showCp3 && <Cp3Modal mission={mission} onClose={() => setShowCp3(false)} />}
+      {viewingDeck && (
+        <SlideDeckViewer deck={viewingDeck} onClose={() => setViewingDeck(null)} />
+      )}
     </div>
   )
 }

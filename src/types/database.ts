@@ -50,6 +50,7 @@ export type DeliverableType =
   | 'opportunity_map' | 'product_blueprint' | 'screen_designs'
   | 'business_model' | 'frontend_code' | 'a11y_audit' | 'legal_review' | 'ethics_review' | 'test_suite'
   | 'custom_report'
+  | 'slide_deck'
 
 export type DeliverableStatus = 'pending' | 'approved' | 'rejected' | 'revised' | 'final'
 

@@ -544,6 +544,7 @@ ${subContext}
 ⚠️ 출력 형식 — JSON으로만 응답하세요. 마크다운·설명 없이 순수 JSON:
 
 {
+  "tldr": "디렉터가 3초 안에 핵심을 파악할 수 있는 2~3문장 요약 (한국어). 가장 매력적인 후보 1~2개와 그 이유를 함축적으로.",
   "summary": "[A] 도메인 스캐닝 요약을 1단락으로 (한국어)",
   "candidates": [
     {
@@ -1419,6 +1420,100 @@ async function handleCp3Decision(supabase: SbClient, mission: Mission, decision:
 }
 
 // ============================================================
+// 슬라이드 변환 (Phase 18) — Opportunity Map을 슬라이드 deck으로
+// ============================================================
+
+async function handleGenerateSlides(
+  supabase: SbClient,
+  mission: Mission,
+): Promise<{ deliverable_id?: string; note?: string }> {
+  const oppMap = await getLatestDeliverable(supabase, mission.id, 'opportunity_map')
+  if (!oppMap) {
+    throw new Error('Opportunity Map이 없습니다. 먼저 루미 단계를 완료하세요.')
+  }
+
+  const systemPrompt = await loadAgentPrompt(supabase, 'lumi')
+
+  const userPrompt = `[디렉터가 현재 Opportunity Map을 슬라이드 발표 자료로 변환 요청했습니다]
+
+원본 Opportunity Map JSON:
+${JSON.stringify(oppMap.data, null, 2)}
+
+위 내용을 임원/투자자 대상 발표용 슬라이드 deck으로 재구성하세요. 디자이너가 화면에서 좌우로 넘기며 보고, 필요시 인쇄해서 PDF로 export할 형식입니다.
+
+⚠️ 출력 형식 — JSON only:
+{
+  "title": "deck 전체 제목",
+  "subtitle": "한 문장 부제",
+  "slides": [
+    {
+      "title": "슬라이드 제목",
+      "layout": "title | bullets | two_column | quote | metrics | comparison",
+      "content": {
+        "headline": "큰 글씨로 강조할 메시지 (있다면)",
+        "bullets": ["불릿 1", "불릿 2"],
+        "left": "two_column 왼쪽",
+        "right": "two_column 오른쪽",
+        "quote": "인용문 (있다면)",
+        "metrics": [{ "label": "지표명", "value": "값", "note": "보조 설명" }],
+        "compare": [{ "name": "항목명", "items": ["속성 1", "속성 2"] }]
+      },
+      "speaker_notes": "발표자 노트 (스크린에는 안 보임)"
+    }
+  ]
+}
+
+가이드라인:
+- 8~12장 권장. 너무 길게 X.
+- 첫 슬라이드는 layout="title"로 제품 컨셉을 한 줄로
+- TL;DR 슬라이드 → 5개 후보 비교(layout="comparison") → 추천 후보 1~2개 심화(layout="bullets" 또는 "metrics") → 데이터 공백·다음 액션(layout="bullets")
+- 각 슬라이드 텍스트는 짧고 발표 가능한 형태 (긴 문단 X)
+- speaker_notes는 발표자가 말로 풀어줄 내용`
+
+  const raw = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: 'gemini-2.5-pro',
+    temperature: 0.5,
+    jsonMode: true,
+  })
+
+  // deno-lint-ignore no-explicit-any
+  const parsed: any = parseLooseJson(raw) ?? { error: 'parse_failed', raw }
+  if (parsed.error) {
+    throw new Error('슬라이드 JSON 파싱 실패')
+  }
+
+  const md = `## 📊 ${parsed.title ?? '슬라이드 deck'}\n_슬라이드 ${parsed.slides?.length ?? 0}장이 생성되었습니다. 채팅의 "슬라이드 보기" 버튼을 눌러 확인하세요._`
+
+  const { data: ins } = await supabase
+    .from('deliverables')
+    .insert({
+      mission_id: mission.id,
+      type: 'slide_deck',
+      version: 'v1.0',
+      data: parsed,
+      raw_markdown: md,
+      created_by: 'lumi',
+      status: 'final',
+    })
+    .select('id')
+    .single()
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'lumi',
+    recipient: 'director',
+    re: `슬라이드 deck — ${parsed.title ?? 'Opportunity Map'}`,
+    type: 'Deliverable',
+    content: md,
+    metadata: { format: 'slide_deck', parsed, deliverable_id: (ins as { id?: string } | null)?.id },
+  })
+
+  return { deliverable_id: (ins as { id?: string } | null)?.id, note: '슬라이드 생성 완료' }
+}
+
+// ============================================================
 // 인공 지혜 추출 (글로벌 액션)
 // ============================================================
 
@@ -1565,6 +1660,9 @@ Deno.serve(async (req) => {
     } else if (action === 'specialist') {
       if (!specialist_id) return jsonResp({ error: 'specialist_id required' }, 400)
       newState = await handleSpecialistInvocation(supabase, mission, specialist_id)
+    } else if (action === 'generate_slides') {
+      const result = await handleGenerateSlides(supabase, mission)
+      return jsonResp({ ok: true, ...result }, 200)
     } else {
       // 자동 진행 (상태 기반)
       switch (mission.current_state) {
