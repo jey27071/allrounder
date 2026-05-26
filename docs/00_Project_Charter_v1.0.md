@@ -91,9 +91,11 @@
   - 모달: `AgentFormModal`, `KnowledgeFormModal`, `ExampleFormModal`, `PromptVersionModal`
   - Edge Function `loadAgentPrompt`가 wisdom + knowledge + examples를 자동 합성
 - **Phase 13**: 하위팀 — 루미·아키 아래 각 2명의 하위 에이전트를 두고 부모 호출 시 자동 병렬 실행
+  - 설계 원칙: **전문가 분업(Specialization) + 교차 검증(Cross-check)**.
+    하위 에이전트는 서로 다른 영역(루미: 정량·정성, 아키: IA·여정)을 맡고, 부모는 종합 단계에서 모순·공백·할루시네이션을 명시적으로 점검.
   - 마이그레이션: `supabase/migrations/007_sub_agents.sql` (agents에 `parent_agent_id` 추가)
   - 페르소나: `src/data/sub_agents.ts` (lumi_data, lumi_scout, aki_ia, aki_flow)
-  - Edge Function: `runSubAgents()` + `formatSubAgentContext()` 헬퍼, `handleLumiWorking`·`handleAkiDesigning`에서 자동 호출
+  - Edge Function: `runSubAgents()` + `formatSubAgentContext()` 헬퍼. 후자는 부모에게 4가지 교차 검증(모순·공백·신뢰도·할루시네이션)을 강제하고 `cross_check` 필드 추가를 권장.
   - 디렉터 UX 변화 없음 — 워크플로우 상태는 그대로, 채팅에 하위팀 결과가 메시지로 누적됨
   - AgentsPage: 하위 에이전트를 부모 아래에 들여쓰기로 표시(SUB 뱃지)
 
