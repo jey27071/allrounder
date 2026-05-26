@@ -10,6 +10,7 @@ import Cp3Modal from './Cp3Modal'
 import AgentTeamPanel from './AgentTeamPanel'
 import OpportunityMapSummary from './OpportunityMapSummary'
 import SlideDeckViewer, { type SlideDeck } from './SlideDeckViewer'
+import ErrorBoundary from './ErrorBoundary'
 
 interface MissionChatProps {
   mission: Mission
@@ -200,33 +201,42 @@ export default function MissionChat({ mission }: MissionChatProps) {
             // deno-lint-ignore no-explicit-any
             const meta = (msg.metadata ?? {}) as any
             // Opportunity Map 메시지 → 요약 카드 위에 표시
-            if (meta.format === 'opportunity_map' && meta.parsed) {
+            if (meta && meta.format === 'opportunity_map' && meta.parsed) {
               return (
-                <div key={msg.id}>
-                  <OpportunityMapSummary
-                    data={meta.parsed}
-                    onConvertToSlides={() => void handleGenerateSlides()}
-                    converting={convertingSlides}
-                  />
-                  <MessageBubble message={msg} />
-                </div>
+                <ErrorBoundary key={msg.id} label="Opportunity Map 메시지">
+                  <div>
+                    <OpportunityMapSummary
+                      data={meta.parsed}
+                      onConvertToSlides={() => void handleGenerateSlides()}
+                      converting={convertingSlides}
+                    />
+                    <MessageBubble message={msg} />
+                  </div>
+                </ErrorBoundary>
               )
             }
             // Slide deck 메시지 → "보기" 버튼
-            if (meta.format === 'slide_deck' && meta.parsed) {
+            if (meta && meta.format === 'slide_deck' && meta.parsed) {
+              const slidesCount = Array.isArray(meta.parsed?.slides) ? meta.parsed.slides.length : 0
               return (
-                <div key={msg.id}>
-                  <MessageBubble message={msg} />
-                  <button
-                    onClick={() => handleViewDeck(meta.parsed as SlideDeck)}
-                    className="ml-12 mt-1 text-xs px-3 py-1.5 rounded bg-primary text-white hover:opacity-90"
-                  >
-                    📊 슬라이드 보기 ({meta.parsed.slides?.length ?? 0}장)
-                  </button>
-                </div>
+                <ErrorBoundary key={msg.id} label="슬라이드 메시지">
+                  <div>
+                    <MessageBubble message={msg} />
+                    <button
+                      onClick={() => handleViewDeck(meta.parsed as SlideDeck)}
+                      className="ml-12 mt-1 text-xs px-3 py-1.5 rounded bg-primary text-white hover:opacity-90"
+                    >
+                      📊 슬라이드 보기 ({slidesCount}장)
+                    </button>
+                  </div>
+                </ErrorBoundary>
               )
             }
-            return <MessageBubble key={msg.id} message={msg} />
+            return (
+              <ErrorBoundary key={msg.id} label="메시지">
+                <MessageBubble message={msg} />
+              </ErrorBoundary>
+            )
           })
         )}
         {slidesError && (

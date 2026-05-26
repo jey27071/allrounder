@@ -5,6 +5,7 @@ import MissionsPage from '@/pages/MissionsPage'
 import AgentsPage from '@/pages/AgentsPage'
 import HistoryPage from '@/pages/HistoryPage'
 import SettingsPage from '@/pages/SettingsPage'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import type { Mission } from '@/types/app'
 
 export type PageKey = 'missions' | 'history' | 'agents' | 'settings'
@@ -25,19 +26,23 @@ function App() {
         <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} onNewMission={handleNewMission} />
 
         <div className="overflow-hidden h-screen flex flex-col">
-          {currentPage === 'missions' && (
-            <MissionsPage
-              onMissionChange={setActiveMission}
-              openModal={newMissionModalOpen}
-              onCloseModal={() => setNewMissionModalOpen(false)}
-            />
-          )}
-          {currentPage === 'history' && <HistoryPage />}
-          {currentPage === 'agents' && <AgentsPage />}
-          {currentPage === 'settings' && <SettingsPage />}
+          <ErrorBoundary label="페이지">
+            {currentPage === 'missions' && (
+              <MissionsPage
+                onMissionChange={setActiveMission}
+                openModal={newMissionModalOpen}
+                onCloseModal={() => setNewMissionModalOpen(false)}
+              />
+            )}
+            {currentPage === 'history' && <HistoryPage />}
+            {currentPage === 'agents' && <AgentsPage />}
+            {currentPage === 'settings' && <SettingsPage />}
+          </ErrorBoundary>
         </div>
 
-        <MonitorPanel mission={currentPage === 'missions' ? activeMission : null} />
+        <ErrorBoundary label="모니터 패널">
+          <MonitorPanel mission={currentPage === 'missions' ? activeMission : null} />
+        </ErrorBoundary>
       </div>
     </div>
   )
