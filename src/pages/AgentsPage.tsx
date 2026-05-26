@@ -36,6 +36,21 @@ import DesignSystemFormModal from '@/components/DesignSystemFormModal'
 
 type Tab = 'prompt' | 'knowledge' | 'examples' | 'versions' | 'wisdom' | 'design'
 
+/**
+ * 디자인 시스템 탭을 표시할 에이전트.
+ * - 빌트인: 비주얼 산출물(HTML/React/시안)을 만드는 에이전트만
+ * - 커스텀: 사용자가 비주얼 작업용으로 만들 수도 있으므로 항상 표시
+ */
+const VISUAL_BUILTIN_AGENTS = new Set<string>([
+  'joi', 'tars',
+  'joi_palette', 'joi_type',
+  'tars_markup', 'tars_logic',
+])
+
+function supportsDesignSystem(agent: { id: string; is_custom: boolean }): boolean {
+  return agent.is_custom || VISUAL_BUILTIN_AGENTS.has(agent.id)
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [wisdom, setWisdom] = useState<WisdomPrinciple[]>([])
@@ -78,6 +93,14 @@ export default function AgentsPage() {
     if (selectedId) void loadDetail(selectedId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
+
+  // 디자인 시스템 탭에 있는데 새 에이전트가 그 탭을 지원하지 않으면 폴백
+  useEffect(() => {
+    if (tab === 'design') {
+      const a = agents.find((x) => x.id === selectedId)
+      if (a && !supportsDesignSystem(a)) setTab('prompt')
+    }
+  }, [selectedId, agents, tab])
 
   async function loadAll() {
     setLoading(true)
@@ -370,9 +393,11 @@ export default function AgentsPage() {
             <TabButton current={tab} value="wisdom" onClick={setTab} count={relatedWisdom.length}>
               지혜
             </TabButton>
-            <TabButton current={tab} value="design" onClick={setTab} count={designSystems.length}>
-              디자인 시스템
-            </TabButton>
+            {supportsDesignSystem(selectedAgent) && (
+              <TabButton current={tab} value="design" onClick={setTab} count={designSystems.length}>
+                디자인 시스템
+              </TabButton>
+            )}
           </div>
 
           <div className="p-5">
