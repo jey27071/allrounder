@@ -104,6 +104,7 @@ export type Database = {
           description: string | null
           model: string | null
           deliverable_type: string | null
+          parent_agent_id: AgentId | null
           updated_at: string
         }
         Insert: {
@@ -117,6 +118,7 @@ export type Database = {
           description?: string | null
           model?: string | null
           deliverable_type?: string | null
+          parent_agent_id?: AgentId | null
           updated_at?: string
         }
         Update: Partial<Database['public']['Tables']['agents']['Insert']>

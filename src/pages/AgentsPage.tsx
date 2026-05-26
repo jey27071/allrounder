@@ -262,35 +262,50 @@ export default function AgentsPage() {
       )}
 
       <div className="grid grid-cols-[260px_1fr] gap-6 max-w-6xl">
-        {/* Agent List */}
+        {/* Agent List — 부모 → 하위 들여쓰기 표시 */}
         <div className="flex flex-col gap-2">
-          {agents.map((agent) => {
-            const isSelected = selectedAgent.id === agent.id
-            return (
-              <button
-                key={agent.id}
-                onClick={() => setSelectedId(agent.id)}
-                className={`text-left p-3 border rounded-lg transition group ${
-                  isSelected
-                    ? 'border-primary bg-white'
-                    : 'border-border bg-white hover:border-gray-400'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`w-2.5 h-2.5 rounded-full ${bgForToken(agent.color_token)}`} />
-                  <span className="font-bold text-sm">{agent.name}</span>
-                  <span className="text-[10px] text-gray-400 font-mono">{agent.current_version}</span>
-                  {agent.is_custom && (
-                    <span className="text-[9px] px-1 rounded bg-primary/10 text-primary ml-auto">CUSTOM</span>
+          {(() => {
+            const tops = agents.filter((a) => !a.parent_agent_id)
+            const childrenOf = (parentId: AgentId) =>
+              agents.filter((a) => a.parent_agent_id === parentId)
+            const rows: { agent: Agent; depth: number }[] = []
+            for (const t of tops) {
+              rows.push({ agent: t, depth: 0 })
+              for (const c of childrenOf(t.id)) rows.push({ agent: c, depth: 1 })
+            }
+            return rows.map(({ agent, depth }) => {
+              const isSelected = selectedAgent.id === agent.id
+              return (
+                <button
+                  key={agent.id}
+                  onClick={() => setSelectedId(agent.id)}
+                  style={depth > 0 ? { marginLeft: 16 } : undefined}
+                  className={`text-left p-3 border rounded-lg transition group ${
+                    isSelected
+                      ? 'border-primary bg-white'
+                      : 'border-border bg-white hover:border-gray-400'
+                  } ${depth > 0 ? 'border-dashed' : ''}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    {depth > 0 && <span className="text-gray-300 text-xs">└</span>}
+                    <span className={`w-2.5 h-2.5 rounded-full ${bgForToken(agent.color_token)}`} />
+                    <span className="font-bold text-sm">{agent.name}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">{agent.current_version}</span>
+                    {agent.is_custom && (
+                      <span className="text-[9px] px-1 rounded bg-primary/10 text-primary ml-auto">CUSTOM</span>
+                    )}
+                    {depth > 0 && !agent.is_custom && (
+                      <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 ml-auto">SUB</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate">{agent.role}</div>
+                  {agent.description && (
+                    <div className="text-[11px] text-gray-400 mt-0.5 truncate">{agent.description}</div>
                   )}
-                </div>
-                <div className="text-xs text-gray-500 truncate">{agent.role}</div>
-                {agent.description && (
-                  <div className="text-[11px] text-gray-400 mt-0.5 truncate">{agent.description}</div>
-                )}
-              </button>
-            )
-          })}
+                </button>
+              )
+            })
+          })()}
         </div>
 
         {/* Agent Detail */}

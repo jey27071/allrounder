@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { AGENT_SEEDS, WISDOM_SEEDS } from '@/data/personas'
+import { AGENT_SEEDS, WISDOM_SEEDS, SUB_AGENT_SEEDS } from '@/data/personas'
 
 export interface SeedResult {
   agentsInserted: number
@@ -38,6 +38,17 @@ export async function seedDatabase(): Promise<SeedResult> {
       result.errors.push(`agents 삽입 실패: ${insertErr.message}`)
     } else {
       result.agentsInserted = missingAgents.length
+    }
+  }
+
+  // 1-b. 하위 에이전트 시드 (parent_agent_id 포함). 멱등 처리.
+  const missingSubs = SUB_AGENT_SEEDS.filter((s) => !existingIds.has(s.id))
+  if (missingSubs.length > 0) {
+    const { error: subErr } = await supabase.from('agents').insert(missingSubs)
+    if (subErr) {
+      result.errors.push(`sub-agents 삽입 실패: ${subErr.message}`)
+    } else {
+      result.agentsInserted += missingSubs.length
     }
   }
 

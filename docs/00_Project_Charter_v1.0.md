@@ -74,6 +74,8 @@
 ### 에이전트 팀 (MVT에서 확장됨)
 - **오케스트레이터**: 자비스 (시스템 자동 라우팅)
 - **워크플로우(자동)**: 루미·아키·조이(비주얼 디자인)
+- **루미 하위팀(자동 병렬 호출)**: 루미·데이터(`lumi_data`), 루미·스카웃(`lumi_scout`) — Phase 13에서 추가
+- **아키 하위팀(자동 병렬 호출)**: 아키·IA(`aki_ia`), 아키·여정(`aki_flow`) — Phase 13에서 추가
 - **호출형(invoke)**: 프라이데이·타스·에코·키트·에씨카·QA봇 — 디렉터가 미션 화면에서 직접 호출
 - **커스텀(사용자 추가)**: 사용자가 에이전트 메뉴에서 직접 추가 가능 (Phase 12에서 추가)
 
@@ -88,15 +90,22 @@
   - 라이브러리: `src/lib/agents.ts`
   - 모달: `AgentFormModal`, `KnowledgeFormModal`, `ExampleFormModal`, `PromptVersionModal`
   - Edge Function `loadAgentPrompt`가 wisdom + knowledge + examples를 자동 합성
+- **Phase 13**: 하위팀 — 루미·아키 아래 각 2명의 하위 에이전트를 두고 부모 호출 시 자동 병렬 실행
+  - 마이그레이션: `supabase/migrations/007_sub_agents.sql` (agents에 `parent_agent_id` 추가)
+  - 페르소나: `src/data/sub_agents.ts` (lumi_data, lumi_scout, aki_ia, aki_flow)
+  - Edge Function: `runSubAgents()` + `formatSubAgentContext()` 헬퍼, `handleLumiWorking`·`handleAkiDesigning`에서 자동 호출
+  - 디렉터 UX 변화 없음 — 워크플로우 상태는 그대로, 채팅에 하위팀 결과가 메시지로 누적됨
+  - AgentsPage: 하위 에이전트를 부모 아래에 들여쓰기로 표시(SUB 뱃지)
 
 ---
 
-## 5. 다음 단계 (Phase 13+ 후보)
+## 5. 다음 단계 (Phase 14+ 후보)
 
-- ☐ **하위 팀 세분화**: 루미 아래에 데이터 분석·트렌드 스카웃 등 하위 에이전트 추가
+- ☐ **하위팀 확장**: 각 부모 아래 3~5명으로 확대, 도메인별 sub-agent 추가
 - ☐ **커스텀 에이전트 출력 템플릿**: 현재는 JSON 자유 형식, 구조화된 템플릿 도입
 - ☐ **지식 파일 업로드**: 현재 텍스트 직접 입력만 가능, PDF/이미지 업로드 지원
 - ☐ **에이전트 간 직접 협업**: 커스텀 에이전트가 다른 에이전트의 산출물을 참조하는 워크플로우
+- ☐ **하위팀 옵션화**: 미션마다 "깊이 모드"(하위팀 실행) vs "속도 모드"(부모만 단독)를 디렉터가 선택
 
 ---
 

@@ -203,6 +203,93 @@ async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<str
   return prompt
 }
 
+// ============================================================
+// 하위 에이전트 병렬 실행 (Phase 13)
+// ============================================================
+
+interface SubAgentOutput {
+  agentId: string
+  agentName: string
+  // deno-lint-ignore no-explicit-any
+  parsed: any
+  raw: string
+}
+
+/**
+ * 주어진 부모 에이전트의 모든 하위 에이전트를 병렬로 실행하고
+ * 결과를 messages·diaries에 기록한 뒤 배열로 돌려준다.
+ * 부모 핸들러는 이 결과를 자신의 user prompt에 컨텍스트로 첨부.
+ */
+async function runSubAgents(
+  supabase: SbClient,
+  parentId: string,
+  mission: Mission,
+  userPromptForSub: string,
+): Promise<SubAgentOutput[]> {
+  const { data: subs } = await supabase
+    .from('agents')
+    .select('id, name, model')
+    .eq('parent_agent_id', parentId)
+    .order('id', { ascending: true })
+
+  if (!subs || subs.length === 0) return []
+
+  // deno-lint-ignore no-explicit-any
+  const runOne = async (sub: any): Promise<SubAgentOutput> => {
+    const systemPrompt = await loadAgentPrompt(supabase, sub.id)
+    const raw = await callGemini({
+      systemPrompt,
+      userMessage: userPromptForSub,
+      model: sub.model ?? 'gemini-2.5-flash',
+      temperature: 0.6,
+      jsonMode: true,
+    })
+    const parsed = parseLooseJson(raw) ?? { error: 'parse_failed', raw }
+    return { agentId: sub.id, agentName: sub.name, parsed, raw }
+  }
+
+  const results = await Promise.all(subs.map(runOne))
+
+  // 각 하위 결과를 mission 메시지로 기록 (디렉터가 진행 흐름 추적 가능)
+  for (const r of results) {
+    await supabase.from('messages').insert({
+      mission_id: mission.id,
+      sender: r.agentId,
+      recipient: parentId,
+      cc: ['director'],
+      re: `${r.agentName} → ${parentId} 사전조사 결과`,
+      type: 'StatusUpdate',
+      content: '```json\n' + JSON.stringify(r.parsed, null, 2) + '\n```',
+      metadata: { sub_agent_for: parentId, parsed: r.parsed },
+    })
+
+    if (r.parsed?.diary) {
+      await supabase.from('diaries').insert({
+        mission_id: mission.id,
+        agent_id: r.agentId,
+        context_label: `${parentId} 사전조사`,
+        difficulty: r.parsed.diary.difficulty ?? null,
+        insight: r.parsed.diary.insight ?? null,
+        next_try: r.parsed.diary.next_try ?? null,
+      })
+    }
+  }
+
+  return results
+}
+
+/** 하위 결과들을 부모 user prompt에 첨부할 텍스트로 직렬화 */
+function formatSubAgentContext(results: SubAgentOutput[]): string {
+  if (results.length === 0) return ''
+  let out = '\n\n# 하위팀 사전조사 결과 (당신은 이 결과를 종합하는 조정자입니다)\n'
+  for (const r of results) {
+    out += `\n## ${r.agentName} (${r.agentId})\n`
+    out += '```json\n' + JSON.stringify(r.parsed, null, 2) + '\n```\n'
+  }
+  out += '\n위 하위팀 결과를 충실히 반영하여 당신의 산출물을 작성하세요. 하위팀이 제시한 데이터 공백·신호·플로우를 무시하지 마세요.'
+  return out
+}
+
 /** 커스텀 에이전트도 호출 가능하도록 fallback config 생성 */
 // deno-lint-ignore no-explicit-any
 async function resolveSpecialistConfig(supabase: SbClient, specialistId: string): Promise<any> {
@@ -302,14 +389,27 @@ async function handleLumiWorking(supabase: SbClient, mission: Mission): Promise<
     }
   }
 
-  const userPrompt = `[자비스로부터 미션을 받았습니다]
+  // === Phase 13: 하위팀(lumi_data, lumi_scout) 먼저 병렬 실행 ===
+  const subUserPrompt = `[루미(상위 조정자)로부터 사전조사 요청]
 
 미션 헌장:
 - 도메인: ${mission.domain}
 - 임무: ${mission.charter}
 ${mission.context ? `- 컨텍스트: ${mission.context}` : ''}
 
-위 미션에 따라 Opportunity Map v1.0을 작성하세요.
+당신의 전문 영역에 해당하는 자료를 시스템 프롬프트에 명시된 JSON 형식으로만 응답하세요.`
+  const subResults = await runSubAgents(supabase, 'lumi', mission, subUserPrompt)
+  const subContext = formatSubAgentContext(subResults)
+
+  const userPrompt = `[자비스로부터 미션을 받았습니다]
+
+미션 헌장:
+- 도메인: ${mission.domain}
+- 임무: ${mission.charter}
+${mission.context ? `- 컨텍스트: ${mission.context}` : ''}
+${subContext}
+
+위 미션과 하위팀 결과를 바탕으로 Opportunity Map v1.0을 작성하세요.
 
 ⚠️ 출력 형식 — JSON으로만 응답하세요. 마크다운·설명 없이 순수 JSON:
 
@@ -706,6 +806,20 @@ async function handleAkiDesigning(supabase: SbClient, mission: Mission): Promise
     throw new Error(`후보 #${mission.selected_candidate_index} 찾을 수 없음`)
   }
 
+  // === Phase 13: 아키 하위팀(aki_ia, aki_flow) 먼저 병렬 실행 ===
+  const subUserPrompt = `[아키(상위 조정자)로부터 사전 설계 요청]
+
+미션 헌장:
+- 도메인: ${mission.domain}
+- 임무: ${mission.charter}
+
+선택된 후보:
+${JSON.stringify(selected, null, 2)}
+
+당신의 전문 영역에 해당하는 설계안을 시스템 프롬프트에 명시된 JSON 형식으로만 응답하세요.`
+  const subResults = await runSubAgents(supabase, 'aki', mission, subUserPrompt)
+  const subContext = formatSubAgentContext(subResults)
+
   const userPrompt = `[디렉터가 후보 #${selected.number} "${selected.name}" 을 선택했습니다]
 
 선택된 후보 상세:
@@ -714,8 +828,9 @@ ${JSON.stringify(selected, null, 2)}
 미션 헌장:
 - 도메인: ${mission.domain}
 - 임무: ${mission.charter}
+${subContext}
 
-위 후보를 실제로 디자인 작업을 시작할 수 있는 Product Blueprint v1.0으로 변환하세요.
+위 후보와 하위팀 사전 설계를 바탕으로 Product Blueprint v1.0으로 종합하세요.
 
 ⚠️ 출력 형식 — JSON으로만 응답:
 

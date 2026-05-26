@@ -272,6 +272,7 @@ G5. 디자인 디테일(폰트·정확한 컬러·카피)은 디렉터의 영역
 `
 
 import { SPECIALIST_SEEDS } from './specialists'
+import { SUB_AGENT_SEEDS } from './sub_agents'
 
 const CORE_SEEDS: AgentSeed[] = [
   {
@@ -309,6 +310,11 @@ const CORE_SEEDS: AgentSeed[] = [
 ]
 
 export const AGENT_SEEDS: AgentSeed[] = [...CORE_SEEDS, ...SPECIALIST_SEEDS]
+
+/**
+ * 하위 에이전트는 parent_agent_id를 가진다. seed.ts에서 별도 분기 처리.
+ */
+export { SUB_AGENT_SEEDS }
 
 export interface WisdomSeed {
   title: string
