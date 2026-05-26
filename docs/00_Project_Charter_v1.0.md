@@ -104,6 +104,13 @@
 
 ---
 
+- **Phase 17**: 에이전트별 디자인 시스템 학습·반영 (조이 우선)
+  - 마이그레이션: `supabase/migrations/008_agent_design_systems.sql`
+  - 라이브러리: `src/lib/designSystems.ts` (parseDesignTokensJson 포함)
+  - UI: `DesignSystemFormModal` (구조화 폼 + JSON paste 모드), AgentsPage에 "디자인 시스템" 탭
+  - Edge Function: `loadAgentPrompt`에 활성 디자인 시스템 첨부 + `validateAgainstDesignSystem` 헬퍼로 조이 시안에서 hex 색상·폰트 추출 → 시스템 외 값 사용 시 시스템 메시지로 검증 결과 자동 보고
+  - 에이전트당 활성 디자인 시스템 1개만 (부분 UNIQUE INDEX로 강제)
+
 - **Phase 14**: 조이·타스·QA봇 하위팀 추가 (총 7명)
   - 페르소나: `src/data/sub_agents_phase14.ts`
   - 조이 하위(`joi_palette`, `joi_type`)는 비주얼 시스템 정의, 조이는 HTML 시안에 적용

@@ -154,7 +154,13 @@ type Mission = any
 type SbClient = any
 
 async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<string> {
-  const [{ data: agent }, { data: wisdoms }, { data: knowledge }, { data: examples }] = await Promise.all([
+  const [
+    { data: agent },
+    { data: wisdoms },
+    { data: knowledge },
+    { data: examples },
+    { data: designSystems },
+  ] = await Promise.all([
     supabase.from('agents').select('system_prompt').eq('id', agentId).single(),
     supabase
       .from('wisdom_principles')
@@ -173,6 +179,12 @@ async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<str
       .eq('agent_id', agentId)
       .eq('active', true)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('agent_design_systems')
+      .select('name, description, tokens, components, principles')
+      .eq('agent_id', agentId)
+      .eq('active', true)
+      .limit(1),
   ])
 
   let prompt = agent?.system_prompt ?? ''
@@ -200,7 +212,115 @@ async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<str
     }
   }
 
+  if (designSystems && designSystems.length > 0) {
+    const ds = designSystems[0]
+    prompt += `\n\n# 적용할 디자인 시스템: ${ds.name}\n`
+    if (ds.description) prompt += `_${ds.description}_\n`
+    prompt += '\n## 토큰\n```json\n' + JSON.stringify(ds.tokens, null, 2) + '\n```\n'
+    if (Array.isArray(ds.components) && ds.components.length > 0) {
+      prompt += '\n## 컴포넌트 카탈로그\n```json\n' + JSON.stringify(ds.components, null, 2) + '\n```\n'
+    }
+    if (ds.principles) prompt += '\n## 원칙·금기사항\n' + ds.principles + '\n'
+    prompt += '\n⚠️ **이 디자인 시스템의 토큰을 정확히 따르세요.** 임의의 hex 색상·폰트·간격 값을 만들지 말고 위 정의된 값만 사용. 부득이하게 시스템에 없는 값을 써야 한다면 그 사유를 응답에 명시.\n'
+  }
+
   return prompt
+}
+
+// ============================================================
+// 디자인 시스템 자동 검증 (Phase 17)
+// ============================================================
+
+interface DesignValidationIssue {
+  type: 'unknown_color' | 'unknown_font'
+  value: string
+  context: string
+}
+
+/** HTML/CSS에서 hex 색상과 font-family 추출 */
+function extractColorsAndFonts(html: string): { colors: Set<string>; fonts: Set<string> } {
+  const colors = new Set<string>()
+  const fonts = new Set<string>()
+  // hex 색상 (3·4·6·8자리)
+  const hexRe = /#[0-9a-fA-F]{3,8}\b/g
+  let m: RegExpExecArray | null
+  while ((m = hexRe.exec(html)) !== null) {
+    colors.add(m[0].toLowerCase())
+  }
+  // font-family 또는 inline style의 font-family
+  const fontRe = /font-family\s*:\s*([^;"']+)/gi
+  while ((m = fontRe.exec(html)) !== null) {
+    const f = m[1].split(',')[0].trim().replace(/["']/g, '')
+    if (f) fonts.add(f.toLowerCase())
+  }
+  return { colors, fonts }
+}
+
+/** 디자인 시스템 tokens에서 허용된 색상·폰트 집합 추출 */
+function extractAllowedColorsAndFonts(
+  // deno-lint-ignore no-explicit-any
+  tokens: any,
+): { colors: Set<string>; fonts: Set<string> } {
+  const colors = new Set<string>()
+  const fonts = new Set<string>()
+  const walk = (obj: unknown, into: 'color' | 'font' | 'any') => {
+    if (typeof obj === 'string') {
+      if ((into === 'color' || into === 'any') && /^#[0-9a-fA-F]{3,8}$/.test(obj)) {
+        colors.add(obj.toLowerCase())
+      }
+      if ((into === 'font' || into === 'any') && /^[A-Za-z]/.test(obj)) {
+        fonts.add(obj.toLowerCase().split(',')[0].trim())
+      }
+      return
+    }
+    if (typeof obj === 'object' && obj !== null) {
+      for (const [k, v] of Object.entries(obj)) {
+        if (k === 'colors' || k === 'color' || k === 'palette') walk(v, 'color')
+        else if (k === 'typography' || k === 'fonts' || k === 'fontFamily') walk(v, 'font')
+        else walk(v, into === 'any' ? 'any' : into)
+      }
+    }
+  }
+  walk(tokens ?? {}, 'any')
+  return { colors, fonts }
+}
+
+/**
+ * 조이가 만든 HTML(또는 다른 산출물)이 활성 디자인 시스템 토큰을 준수했는지 검증.
+ * 시스템에 없는 hex 색상·폰트를 사용하면 이슈로 반환.
+ */
+async function validateAgainstDesignSystem(
+  supabase: SbClient,
+  agentId: string,
+  html: string,
+): Promise<DesignValidationIssue[]> {
+  const { data: dsRows } = await supabase
+    .from('agent_design_systems')
+    .select('tokens')
+    .eq('agent_id', agentId)
+    .eq('active', true)
+    .limit(1)
+  if (!dsRows || dsRows.length === 0) return []
+  const allowed = extractAllowedColorsAndFonts(dsRows[0].tokens)
+  if (allowed.colors.size === 0 && allowed.fonts.size === 0) return []
+
+  const used = extractColorsAndFonts(html)
+  const issues: DesignValidationIssue[] = []
+  if (allowed.colors.size > 0) {
+    for (const c of used.colors) {
+      if (!allowed.colors.has(c)) {
+        issues.push({ type: 'unknown_color', value: c, context: '디자인 시스템에 없는 색상' })
+      }
+    }
+  }
+  if (allowed.fonts.size > 0) {
+    for (const f of used.fonts) {
+      if (!allowed.fonts.has(f)) {
+        issues.push({ type: 'unknown_font', value: f, context: '디자인 시스템에 없는 폰트' })
+      }
+    }
+  }
+  return issues
 }
 
 // ============================================================
@@ -788,6 +908,33 @@ P0 기능 중 핵심 3~5개 화면을 HTML+TailwindCSS 코드로 작성하세요
       insight: designs.diary.insight,
       next_try: designs.diary.next_try,
     })
+  }
+
+  // === Phase 17: 디자인 시스템 자동 검증 ===
+  try {
+    // deno-lint-ignore no-explicit-any
+    const allHtml = (designs.screens ?? []).map((s: any) => s.html ?? s.html_tailwind ?? '').join('\n')
+    if (allHtml) {
+      const issues = await validateAgainstDesignSystem(supabase, 'joi', allHtml)
+      if (issues.length > 0) {
+        const issueLines = issues
+          .slice(0, 20)
+          .map((i) => `- ${i.type === 'unknown_color' ? '🎨 색상' : '✏️ 폰트'} \`${i.value}\` — ${i.context}`)
+          .join('\n')
+        const more = issues.length > 20 ? `\n\n_(외 ${issues.length - 20}건 생략)_` : ''
+        await supabase.from('messages').insert({
+          mission_id: mission.id,
+          sender: 'system',
+          recipient: 'director',
+          re: '⚠️ 디자인 시스템 검증 결과',
+          type: 'StatusUpdate',
+          content: `**조이 시안에서 디자인 시스템에 없는 토큰이 ${issues.length}건 발견되었습니다.**\n\n${issueLines}${more}\n\n_필요시 조이에게 "디자인 시스템 준수해서 다시" 식으로 재작성 요청하실 수 있어요._`,
+          metadata: { kind: 'design_validation', issues },
+        })
+      }
+    }
+  } catch (e) {
+    console.error('design validation failed:', e)
   }
 
   await supabase.from('missions').update({

@@ -165,6 +165,35 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['agent_knowledge']['Insert']>
       }
+      agent_design_systems: {
+        Row: {
+          id: string
+          agent_id: AgentId
+          name: string
+          description: string | null
+          tokens: Record<string, unknown>
+          components: unknown[]
+          principles: string | null
+          source_raw: string | null
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: AgentId
+          name: string
+          description?: string | null
+          tokens?: Record<string, unknown>
+          components?: unknown[]
+          principles?: string | null
+          source_raw?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['agent_design_systems']['Insert']>
+      }
       agent_examples: {
         Row: {
           id: string

@@ -13,12 +13,18 @@ import {
   rollbackAgentToVersion,
 } from '@/lib/agents'
 import { bgForToken } from '@/lib/agentColors'
+import {
+  listDesignSystems,
+  setActiveDesignSystem,
+  deleteDesignSystem,
+} from '@/lib/designSystems'
 import type {
   Agent,
   AgentId,
   AgentKnowledge,
   AgentExample,
   AgentVersion,
+  AgentDesignSystem,
   WisdomPrinciple,
 } from '@/types/app'
 import WisdomFormModal from '@/components/WisdomFormModal'
@@ -26,8 +32,9 @@ import AgentFormModal from '@/components/AgentFormModal'
 import KnowledgeFormModal from '@/components/KnowledgeFormModal'
 import ExampleFormModal from '@/components/ExampleFormModal'
 import PromptVersionModal from '@/components/PromptVersionModal'
+import DesignSystemFormModal from '@/components/DesignSystemFormModal'
 
-type Tab = 'prompt' | 'knowledge' | 'examples' | 'versions' | 'wisdom'
+type Tab = 'prompt' | 'knowledge' | 'examples' | 'versions' | 'wisdom' | 'design'
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([])
@@ -55,7 +62,12 @@ export default function AgentsPage() {
   const [knowledge, setKnowledge] = useState<AgentKnowledge[]>([])
   const [examples, setExamples] = useState<AgentExample[]>([])
   const [versions, setVersions] = useState<AgentVersion[]>([])
+  const [designSystems, setDesignSystems] = useState<AgentDesignSystem[]>([])
   const [draftPrompt, setDraftPrompt] = useState('')
+
+  // 디자인 시스템 모달
+  const [showDesignForm, setShowDesignForm] = useState(false)
+  const [editingDesign, setEditingDesign] = useState<AgentDesignSystem | null>(null)
 
   useEffect(() => {
     void loadAll()
@@ -87,14 +99,16 @@ export default function AgentsPage() {
   }
 
   async function loadDetail(agentId: AgentId) {
-    const [ks, es, vs] = await Promise.all([
+    const [ks, es, vs, ds] = await Promise.all([
       listKnowledge(agentId, true),
       listExamples(agentId, true),
       listAgentVersions(agentId),
+      listDesignSystems(agentId),
     ])
     setKnowledge(ks)
     setExamples(es)
     setVersions(vs)
+    setDesignSystems(ds)
     const a = agents.find((x) => x.id === agentId)
     if (a) setDraftPrompt(a.system_prompt)
   }
@@ -355,6 +369,9 @@ export default function AgentsPage() {
             </TabButton>
             <TabButton current={tab} value="wisdom" onClick={setTab} count={relatedWisdom.length}>
               지혜
+            </TabButton>
+            <TabButton current={tab} value="design" onClick={setTab} count={designSystems.length}>
+              디자인 시스템
             </TabButton>
           </div>
 
@@ -663,6 +680,124 @@ export default function AgentsPage() {
                 )}
               </div>
             )}
+
+            {/* DESIGN SYSTEM TAB */}
+            {tab === 'design' && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-medium text-gray-500">
+                    디자인 시스템 ({designSystems.length}개) — 활성 1개만 시안 생성 시 첨부됨
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingDesign(null)
+                      setShowDesignForm(true)
+                    }}
+                    className="text-xs px-2.5 py-1 rounded bg-primary text-white hover:opacity-90"
+                  >
+                    + 디자인 시스템 추가
+                  </button>
+                </div>
+                {designSystems.length === 0 ? (
+                  <EmptyState text="등록된 디자인 시스템이 없습니다. JSON으로 paste하거나 폼으로 입력하세요." />
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {designSystems.map((ds) => {
+                      // deno-lint-ignore no-explicit-any
+                      const tokens = (ds.tokens ?? {}) as any
+                      const colorEntries = tokens.colors ? Object.entries(tokens.colors).slice(0, 8) : []
+                      return (
+                        <div
+                          key={ds.id}
+                          className={`border rounded p-3 ${ds.active ? 'border-primary bg-primary/5' : 'border-border bg-white'}`}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div>
+                              <div className="font-medium text-sm flex items-center gap-2">
+                                {ds.name}
+                                {ds.active && (
+                                  <span className="text-[10px] px-1.5 py-0.5 bg-primary text-white rounded">활성</span>
+                                )}
+                              </div>
+                              {ds.description && (
+                                <div className="text-xs text-gray-500 mt-0.5">{ds.description}</div>
+                              )}
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={() => {
+                                  setEditingDesign(ds)
+                                  setShowDesignForm(true)
+                                }}
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-gray-100"
+                              >
+                                편집
+                              </button>
+                              {!ds.active && (
+                                <button
+                                  onClick={async () => {
+                                    if (!selectedId) return
+                                    const r = await setActiveDesignSystem(selectedId, ds.id)
+                                    if (r.ok) void loadDetail(selectedId)
+                                    else alert('활성화 실패: ' + r.error)
+                                  }}
+                                  className="text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-gray-100"
+                                >
+                                  이걸 활성으로
+                                </button>
+                              )}
+                              <button
+                                onClick={async () => {
+                                  if (!confirm('이 디자인 시스템을 삭제하시겠습니까?')) return
+                                  const r = await deleteDesignSystem(ds.id)
+                                  if (r.ok && selectedId) void loadDetail(selectedId)
+                                }}
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-warning/40 text-warning hover:bg-warning/5"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 색상 미리보기 */}
+                          {colorEntries.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              {colorEntries.map(([k, v]) => (
+                                <div
+                                  key={k}
+                                  className="flex items-center gap-1.5 border border-border rounded px-1.5 py-0.5"
+                                  title={`${k}: ${String(v)}`}
+                                >
+                                  <span
+                                    className="w-3 h-3 rounded-sm border border-border"
+                                    style={{ backgroundColor: typeof v === 'string' ? v : '' }}
+                                  />
+                                  <span className="text-[10px] font-mono">{k}</span>
+                                </div>
+                              ))}
+                              {Object.keys(tokens.colors ?? {}).length > colorEntries.length && (
+                                <span className="text-[10px] text-gray-400 self-center">
+                                  +{Object.keys(tokens.colors).length - colorEntries.length}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <details className="mt-2">
+                            <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600">
+                              전체 토큰·컴포넌트 보기
+                            </summary>
+                            <pre className="mt-2 text-[11px] font-mono whitespace-pre-wrap bg-gray-50 p-2 rounded max-h-64 overflow-y-auto">
+                              {JSON.stringify({ tokens: ds.tokens, components: ds.components, principles: ds.principles }, null, 2)}
+                            </pre>
+                          </details>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -723,6 +858,17 @@ export default function AgentsPage() {
             setEditingWisdom(null)
           }}
           onSaved={() => void loadAll()}
+        />
+      )}
+      {showDesignForm && selectedAgent && (
+        <DesignSystemFormModal
+          agentId={selectedAgent.id}
+          initial={editingDesign}
+          onClose={() => {
+            setShowDesignForm(false)
+            setEditingDesign(null)
+          }}
+          onSaved={() => selectedId && loadDetail(selectedId)}
         />
       )}
     </main>
