@@ -104,7 +104,11 @@ export default function AgentFormModal({ initial, onClose, onSaved }: AgentFormM
                 placeholder="예: research_helper"
                 className="w-full border border-border rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary disabled:bg-gray-50 disabled:text-gray-500"
               />
-              <p className="text-[10px] text-gray-400 mt-1">소문자/숫자/_ 2~32자, 영문 시작</p>
+              <p className="text-[10px] text-gray-400 mt-1">
+                {isEdit
+                  ? '🔒 ID는 변경 불가. 메시지·다이어리 등 여러 기록의 참조가 깨져 변경 시 데이터가 일관되지 않게 됩니다. 이름은 자유롭게 바꿀 수 있어요.'
+                  : '소문자/숫자/_ 2~32자, 영문 시작 · 한 번 만들면 ID는 못 바꾸니 신중히'}
+              </p>
             </div>
             <div>
               <label className="text-xs font-medium text-gray-700 mb-1 block">이름 *</label>
