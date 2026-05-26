@@ -272,7 +272,10 @@ G5. 디자인 디테일(폰트·정확한 컬러·카피)은 디렉터의 영역
 `
 
 import { SPECIALIST_SEEDS } from './specialists'
-import { SUB_AGENT_SEEDS } from './sub_agents'
+import { SUB_AGENT_SEEDS as SUB_AGENT_P13_SEEDS } from './sub_agents'
+import { SUB_AGENT_PHASE14_SEEDS } from './sub_agents_phase14'
+
+const SUB_AGENT_SEEDS = [...SUB_AGENT_P13_SEEDS, ...SUB_AGENT_PHASE14_SEEDS]
 
 const CORE_SEEDS: AgentSeed[] = [
   {

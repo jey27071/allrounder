@@ -701,7 +701,8 @@ async function handleJoiDesigning(supabase: SbClient, mission: Mission): Promise
     }
   }
 
-  const userPrompt = `[아키의 Product Blueprint를 받아 시각 시안을 작성합니다]
+  // === Phase 14: 조이 하위팀(joi_palette, joi_type) 먼저 병렬 실행 ===
+  const joiSubUserPrompt = `[조이(상위 조정자)로부터 비주얼 시스템 사전 정의 요청]
 
 Blueprint 데이터 (JSON):
 ${JSON.stringify(blueprint.data, null, 2)}
@@ -710,7 +711,22 @@ ${JSON.stringify(blueprint.data, null, 2)}
 - 도메인: ${mission.domain}
 - 임무: ${mission.charter}
 
-위 Blueprint의 P0 기능 중 핵심 3~5개 화면을 HTML+TailwindCSS 코드로 작성하세요.
+당신의 전문 영역에 해당하는 비주얼 시스템을 시스템 프롬프트에 명시된 JSON 형식으로만 응답하세요.`
+  const joiSubResults = await runSubAgents(supabase, 'joi', mission, joiSubUserPrompt)
+  const joiSubContext = formatSubAgentContext(joiSubResults)
+
+  const userPrompt = `[아키의 Product Blueprint를 받아 시각 시안을 작성합니다]
+
+Blueprint 데이터 (JSON):
+${JSON.stringify(blueprint.data, null, 2)}
+
+미션 헌장:
+- 도메인: ${mission.domain}
+- 임무: ${mission.charter}
+${joiSubContext}
+
+위 Blueprint와 하위팀이 정의한 비주얼 시스템(팔레트·타이포·간격)을 일관되게 적용하여
+P0 기능 중 핵심 3~5개 화면을 HTML+TailwindCSS 코드로 작성하세요.
 지정된 JSON 형식으로만 응답.${reviseContext}`
 
   const joiResponse = await callGemini({
@@ -1129,7 +1145,15 @@ async function handleSpecialistInvocation(
     contextParts += `\n\n[루미의 Opportunity Map]\n${JSON.stringify(oppMap.data, null, 2)}`
   }
 
-  const userPrompt = `${contextParts}\n\n위 정보를 바탕으로 당신의 전문 영역 보고서를 작성하세요. 시스템 프롬프트에 정의된 JSON 형식으로만 응답.`
+  // === Phase 14: specialist 하위팀이 있으면 먼저 병렬 실행 ===
+  const specSubUserPrompt = `[${config.label}(상위 조정자)로부터 전문 영역 사전 분석 요청]
+${contextParts}
+
+당신의 전문 영역에 해당하는 부분을 시스템 프롬프트에 명시된 JSON 형식으로만 응답하세요.`
+  const specSubResults = await runSubAgents(supabase, specialistId, mission, specSubUserPrompt)
+  const specSubContext = formatSubAgentContext(specSubResults)
+
+  const userPrompt = `${contextParts}${specSubContext}\n\n위 정보를 바탕으로 당신의 전문 영역 보고서를 작성하세요. 하위팀이 있다면 그 결과를 종합·교차검증하여 반영. 시스템 프롬프트에 정의된 JSON 형식으로만 응답.`
 
   const response = await callGemini({
     systemPrompt,
