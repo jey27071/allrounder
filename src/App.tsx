@@ -51,11 +51,9 @@ function App() {
     }
   }
 
-  // 미션 페이지가 아니면 모니터 패널을 강제로 접음 (사용자 토글은 미션 페이지에서만 의미)
-  const effectiveMonitorCollapsed = currentPage !== 'missions' ? true : monitorCollapsed
-
+  // 사용자가 어디서든 접고 펼칠 수 있게 (미션 페이지 아닐 때는 빈 상태 안내가 표시됨)
   const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_OPEN
-  const monitorWidth = effectiveMonitorCollapsed ? MONITOR_COLLAPSED : MONITOR_OPEN
+  const monitorWidth = monitorCollapsed ? MONITOR_COLLAPSED : MONITOR_OPEN
 
   return (
     <div className="min-h-screen bg-surface text-primary font-sans">
@@ -84,10 +82,8 @@ function App() {
         <ErrorBoundary label="모니터 패널">
           <MonitorPanel
             mission={currentPage === 'missions' ? activeMission : null}
-            collapsed={effectiveMonitorCollapsed}
-            onToggleCollapse={
-              currentPage === 'missions' ? () => setMonitorCollapsed((v) => !v) : undefined
-            }
+            collapsed={monitorCollapsed}
+            onToggleCollapse={() => setMonitorCollapsed((v) => !v)}
           />
         </ErrorBoundary>
       </div>
