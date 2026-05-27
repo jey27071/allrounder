@@ -1789,6 +1789,85 @@ async function handleUpdateScreenHtml(supabase: SbClient, mission: Mission, body
 }
 
 // ============================================================
+// 완료 미션 사후 Q&A — COMPLETED/ERROR_STATE에서 디렉터의 사후 질문에 자비스가 답변
+// ============================================================
+
+async function handlePostCompletionMessage(
+  supabase: SbClient,
+  mission: Mission,
+): Promise<{ note: string }> {
+  // 마지막 메시지가 디렉터의 새 질문일 때만 응답 (중복 응답 방지)
+  const { data: lastMsg } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('mission_id', mission.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (!lastMsg || lastMsg.sender !== 'director') {
+    return { note: '응답할 새 디렉터 메시지 없음' }
+  }
+  // 그 디렉터 메시지가 자비스로 향한 것이거나 recipient 미지정일 때만
+  if (lastMsg.recipient && lastMsg.recipient !== 'jarvis') {
+    return { note: `메시지는 ${lastMsg.recipient}에게 향함 — 자비스 답변 skip` }
+  }
+
+  // 산출물 요약 (자비스 컨텍스트)
+  const { data: deliverables } = await supabase
+    .from('deliverables')
+    .select('type, version, status, created_by')
+    .eq('mission_id', mission.id)
+    .order('created_at', { ascending: true })
+
+  const deliverableList =
+    (deliverables ?? [])
+      .map((d: { type: string; version: string; status: string; created_by: string }) => `- ${d.type} v${d.version} · ${d.created_by} · ${d.status}`)
+      .join('\n') || '(없음)'
+
+  const systemPrompt = await loadAgentPrompt(supabase, 'jarvis')
+  const userPrompt = `[미션 완료 후 디렉터의 사후 질문 — 답변 요청]
+
+미션 컨텍스트:
+- 제목: ${mission.title}
+- 도메인: ${mission.domain}
+- 임무: ${mission.charter}
+${mission.context ? `- 부가 컨텍스트: ${mission.context}` : ''}
+- 현재 상태: ${mission.current_state}
+
+생성된 산출물:
+${deliverableList}
+
+디렉터의 질문:
+"${lastMsg.content}"
+
+위 컨텍스트를 바탕으로 디렉터의 질문에 답하세요.
+- 미션은 이미 완료된 상태입니다. 새 워크플로우를 자동 시작하지 마세요.
+- 추가 검수가 필요하면 적절한 specialist를 안내 (Friday/TARS/Echo/KITT/Ethica/QA봇/워디).
+- 큰 변경이 필요하면 새 미션을 만들 것을 권장.
+- 산출물 수정이 필요하면 디자인 시안 뷰어의 [화면 재생성/patch] 기능을 안내.
+- 짧고 명확하게, 2~5문장. 한국어.`
+
+  const reply = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: 'gemini-2.5-flash',
+    temperature: 0.7,
+  })
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'jarvis',
+    recipient: 'director',
+    re: '미션 완료 후 응답',
+    type: 'StatusUpdate',
+    content: reply,
+  })
+
+  return { note: '자비스 응답 완료' }
+}
+
+// ============================================================
 // 인공 지혜 추출 (글로벌 액션)
 // ============================================================
 
@@ -1972,8 +2051,11 @@ Deno.serve(async (req) => {
         case 'WAITING_CP2':
         case 'WAITING_CP3':
         case 'COMPLETED':
-        case 'ERROR_STATE':
-          return jsonResp({ ok: true, note: 'No-op for state', state: mission.current_state }, 200)
+        case 'ERROR_STATE': {
+          // 디렉터의 사후 질문에 자비스가 답변 (미션 상태는 그대로 유지)
+          const r = await handlePostCompletionMessage(supabase, mission)
+          return jsonResp({ ok: true, state: mission.current_state, ...r }, 200)
+        }
         default:
           return jsonResp({ error: `Unknown state: ${mission.current_state}` }, 400)
       }
