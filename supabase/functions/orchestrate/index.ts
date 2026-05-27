@@ -1845,12 +1845,30 @@ async function handlePostCompletionMessage(
       summary = data.title ?? ''
       const slides = Array.isArray(data.slides) ? data.slides : []
       if (slides.length > 0) summary += ` (${slides.length}장)`
+    } else if (d.type === 'custom_report') {
+      // 워디(UX 라이팅), 기타 specialist custom_report — audit_summary + improvements 추출
+      if (typeof data.audit_summary === 'string') summary = data.audit_summary.slice(0, 300)
+      if (typeof data.tone_diagnosis === 'string') {
+        summary += '\n  톤 진단: ' + data.tone_diagnosis.slice(0, 200)
+      }
+      const imps = Array.isArray(data.improvements) ? data.improvements : []
+      if (imps.length > 0) {
+        summary += `\n  개선안 ${imps.length}건:`
+        for (const imp of imps.slice(0, 8)) {
+          const loc = imp.location ?? imp.context ?? ''
+          summary += `\n    · [${loc}] "${imp.before ?? ''}" → "${imp.after ?? ''}"${imp.rationale ? ` (${imp.rationale})` : ''}`
+        }
+        if (imps.length > 8) summary += `\n    ...외 ${imps.length - 8}건`
+      }
+      if (typeof data.consistent_voice_suggestion === 'string') {
+        summary += '\n  일관된 보이스 제안: ' + data.consistent_voice_suggestion.slice(0, 200)
+      }
     } else if (typeof data.executive_summary === 'string') {
-      summary = data.executive_summary.slice(0, 200)
+      summary = data.executive_summary.slice(0, 300)
     } else if (typeof data.audit_summary === 'string') {
-      summary = data.audit_summary.slice(0, 200)
+      summary = data.audit_summary.slice(0, 300)
     } else if (typeof data.summary === 'string') {
-      summary = data.summary.slice(0, 200)
+      summary = data.summary.slice(0, 300)
     }
     return `- ${d.type} v${d.version} (${d.created_by}, ${d.status})${summary ? '\n  ' + summary : ''}`
   }).join('\n') || '(없음)'
@@ -1874,11 +1892,14 @@ ${deliverableContext}
 
 ⚠️ 답변 지침:
 1. **질문에 직접 답하세요.** 산출물 데이터를 근거로 의견·평가·아이디어·요약을 제공.
-2. 추측이 들어가면 "(추정)" 표시. 모르면 "산출물에 없어 확신할 수 없어요"라고 솔직히.
-3. "specialist 호출하세요" 같은 매뉴얼 안내는 디렉터가 명시적으로 "다음에 뭘 해야 해?"라고 물을 때만, 그것도 답변 끝에 짧게 1줄.
-4. "새 미션을 시작하세요" 식 권장도 정말 큰 방향 전환이 필요할 때만.
-5. 디렉터가 카피·문구·텍스트 관련 질문이면 워디(UX 라이팅 전문가) 답변에 더 적합하다고 짧게 언급.
-6. 한국어, 자연스러운 대화체로 2~6문장.`
+2. 위 산출물 정보가 보이면 그 안의 내용을 인용·참고해서 답변. "산출물에 적용된지 모르겠다" 같은 회피 답변 금지.
+3. 디렉터가 **행동 명령**("다시 만들어줘", "수정해줘", "적용해줘")을 하면:
+   - 산출물에 관련 데이터(예: 워디 audit, 검수 결과)가 있으면 그 핵심을 1~3개 인용·요약
+   - **구체적 다음 단계** 안내: "디자인 시안 모달 → 화면 단위 [🎯 자연어 patch]에 '워디의 #N번 개선안 적용' 같이 명령하시면 됩니다" 같이 액션 가능한 경로 명시
+   - 자동 트리거는 불가능함을 짧게 알리되, 사용자가 직접 할 수 있는 방법을 분명히
+4. 모르는 건 "산출물에 없어 확신할 수 없어요" 솔직히. 추측은 "(추정)".
+5. 카피·문구 질문은 "워디한테 직접 호출하시는 게 정확해요" 짧게 언급 가능.
+6. 한국어, 자연스러운 대화체로 3~7문장. 너무 짧으면 도움 안 됨.`
 
   const reply = await callGemini({
     systemPrompt,
