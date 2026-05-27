@@ -104,6 +104,18 @@
 
 ---
 
+- **Phase 19**: 조이 시안 강화 + Figma 연계 + 정교 수정
+  - **19-A 모바일/PC 미리보기**: `ScreenPreview`에 디바이스 토글(📱 375 / 📟 768 / 💻 1280 / Full). iframe 너비 동적 변경 + 디바이스 프레임 시각화
+  - **19-B 시안 export**:
+    - `src/lib/screenExport.ts` — 화면별 .html, 통합 .html(page-break), JSON 백업
+    - **Figma Tokens Studio 호환 JSON** — 시안에서 hex/폰트 자동 추출 또는 디자인 시스템 통째 변환
+    - 디자이너 워크플로우: Figma > "Tokens Studio for Figma" plugin > Load from JSON에 paste
+  - **19-C 정교 수정** (Edge Function 새 액션 3개):
+    - `regenerate_screen` (Gemini Pro): 단일 화면만 재생성. 다른 화면 변경 없음
+    - `patch_screen` (Gemini Flash): 자연어 명령으로 최소 변경 patch ("이 카드 배경만 #fff로")
+    - `update_screen_html` (LLM 0회): 디렉터가 직접 편집한 HTML 저장 + 즉시 미리보기
+    - UI: DeliverableViewerModal에 4모드 토글(보기/patch/재생성/HTML 편집)
+
 - **Phase 18**: 루미(리서치) 고도화 — 요약 뷰 + 슬라이드 변환
   - 마이그레이션: `supabase/migrations/009_slide_deck.sql` (deliverables.type에 'slide_deck' 추가)
   - 루미 출력 JSON에 `tldr` 필드 강제 (Edge Function user prompt 수정, DB 재시드 불필요)
@@ -150,14 +162,17 @@
 
 ---
 
-## 6. 다음 단계 (Phase 15+ 후보)
+## 6. 다음 단계 (Phase 20+ 후보)
 
+- ☐ **Phase 20 — Allrounder MCP server** (Figma MCP와 함께 Claude Desktop/Cursor에서 자연어 조작)
 - ☐ **Phase 15 — Hermes 인프라**: `callLLM` 추상화, Hermes 클라이언트, 비용 로깅
 - ☐ **Phase 16 — 실제 전환**: 하위 에이전트 model 일괄 변경, 품질 비교
 - ☐ **2순위 하위팀 추가**: 키트(법무 3분야), 프라이데이(BM/GTM)
 - ☐ **하위팀 옵션화**: 미션마다 "깊이 모드"(하위팀 실행) vs "속도 모드"(부모만 단독) 선택
 - ☐ **지식 파일 업로드**: PDF/이미지 업로드 지원
 - ☐ **에이전트 간 직접 협업**: 커스텀 에이전트 산출물 참조 워크플로우
+- ☐ **SlideDeckViewer 키 네비게이션 버그 수정** (E2E에서 발견, ArrowRight가 모달 닫음)
+- ☐ **시안 PDF/PNG 캡처 export** (Puppeteer/Playwright headless 또는 클라이언트 html2canvas)
 
 ---
 

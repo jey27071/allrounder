@@ -50,8 +50,27 @@ src/
 - **프롬프트 버전**: [프롬프트] 탭에서 수정 → "새 버전 저장" → [버전] 탭에서 과거 버전으로 롤백 가능
 - 커스텀 에이전트는 미션 화면의 "팀원 호출" 패널에도 자동 노출되어 호출 가능합니다.
 
+## 시안 작업 흐름 (Phase 19)
+
+미션이 조이 단계까지 가면 산출물 패널에서 **디자인 시안** 클릭 → 모달에서:
+
+- **디바이스 토글** — 📱 375 / 📟 768 / 💻 1280 / Full
+- **이 화면만 수정** 4 모드:
+  - **🎯 자연어 patch** — "이 카드 색만 #f00으로" → Gemini Flash 1회, 최소 변경
+  - **🔄 재생성** — 화면 하나만 다시 만들기, Gemini Pro 1회
+  - **✏️ HTML 편집** — textarea + 즉시 미리보기, LLM 호출 없이 저장
+- **export** — 단일 .html, 통합 .html, JSON 백업, Figma Tokens Studio JSON
+
+### Figma 연계 (Tokens Studio plugin)
+
+1. Figma에 "Tokens Studio for Figma" plugin 설치 (무료)
+2. 에이전트 메뉴 → 조이 → 디자인 시스템 탭 → **🎨 Figma용 export** 클릭
+3. 다운로드된 .json을 Tokens Studio plugin > Settings > Tools > Load from JSON에 paste
+4. 색상·폰트·간격이 Figma styles로 자동 생성
+
 ## 다음 단계 (아이디어)
 
-- ☐ 커스텀 에이전트 전용 출력 포맷 템플릿 (현재는 JSON 자유 형식)
-- ☐ 지식 파일 업로드 (현재는 텍스트 직접 붙여넣기만)
-- ☐ 사용자가 추가한 에이전트도 Wisdom 적용 대상에 노출
+- ☐ Allrounder MCP server (Claude Desktop/Cursor 통합)
+- ☐ Hermes 모델 라우팅 (토큰 비용 절감)
+- ☐ 시안 PDF/PNG 캡처 export
+- ☐ 지식 파일 업로드 (PDF/이미지)
