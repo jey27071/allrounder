@@ -37,29 +37,10 @@ const AGENT_LABEL: Record<AgentId, string> = {
 }
 
 export default function MonitorPanel({ mission, collapsed, onToggleCollapse }: MonitorPanelProps) {
+  // === hooks는 항상 같은 순서로 호출되어야 함 — early return은 hooks 뒤에 ===
   const currentStepIndex = mission ? stateToStepIndex(mission.current_state) : -1
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
   const [viewing, setViewing] = useState<Deliverable | null>(null)
-
-  if (collapsed) {
-    return (
-      <aside className="border-l border-border flex flex-col items-center py-3 bg-surface">
-        <button
-          onClick={onToggleCollapse}
-          className="w-8 h-8 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-          title="진행 상황 패널 펼치기"
-        >
-          «
-        </button>
-        <div
-          className="mt-3 text-[10px] text-gray-400 tracking-wider"
-          style={{ writingMode: 'vertical-rl' }}
-        >
-          진행 상황
-        </div>
-      </aside>
-    )
-  }
 
   useEffect(() => {
     if (!mission) {
@@ -92,6 +73,27 @@ export default function MonitorPanel({ mission, collapsed, onToggleCollapse }: M
   async function load(missionId: string) {
     const list = await listMissionDeliverables(missionId)
     setDeliverables(list)
+  }
+
+  // === 모든 hooks 호출 끝난 뒤 분기 렌더 ===
+  if (collapsed) {
+    return (
+      <aside className="border-l border-border flex flex-col items-center py-3 bg-surface">
+        <button
+          onClick={onToggleCollapse}
+          className="w-8 h-8 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          title="진행 상황 패널 펼치기"
+        >
+          «
+        </button>
+        <div
+          className="mt-3 text-[10px] text-gray-400 tracking-wider"
+          style={{ writingMode: 'vertical-rl' }}
+        >
+          진행 상황
+        </div>
+      </aside>
+    )
   }
 
   return (
