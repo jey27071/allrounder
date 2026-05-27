@@ -64,9 +64,15 @@ function parseLooseJson(text: string): any | null {
 // Gemini API 호출
 // ============================================================
 
+interface InlineImage {
+  mimeType: string
+  base64: string
+}
+
 interface CallGeminiOpts {
   systemPrompt: string
   userMessage: string
+  images?: InlineImage[]
   model?: string
   temperature?: number
   jsonMode?: boolean
@@ -120,8 +126,16 @@ async function callGemini(opts: CallGeminiOpts): Promise<string> {
   const primaryModel = opts.model ?? 'gemini-2.5-flash'
 
   // deno-lint-ignore no-explicit-any
+  const parts: any[] = [{ text: opts.userMessage }]
+  if (opts.images && opts.images.length > 0) {
+    for (const img of opts.images) {
+      parts.push({ inline_data: { mime_type: img.mimeType, data: img.base64 } })
+    }
+  }
+
+  // deno-lint-ignore no-explicit-any
   const body: any = {
-    contents: [{ role: 'user', parts: [{ text: opts.userMessage }] }],
+    contents: [{ role: 'user', parts }],
     systemInstruction: { parts: [{ text: opts.systemPrompt }] },
     generationConfig: {
       temperature: opts.temperature ?? 0.7,
@@ -152,6 +166,46 @@ async function callGemini(opts: CallGeminiOpts): Promise<string> {
 type Mission = any
 // deno-lint-ignore no-explicit-any
 type SbClient = any
+
+/**
+ * 활성 참고 이미지를 Storage에서 다운로드 → base64로 반환.
+ * 실패한 항목은 skip하고 로그만.
+ */
+async function loadAgentImages(supabase: SbClient, agentId: string): Promise<InlineImage[]> {
+  const { data: refs } = await supabase
+    .from('agent_visual_references')
+    .select('storage_path, mime_type')
+    .eq('agent_id', agentId)
+    .eq('active', true)
+    .limit(5) // 안전 한도
+  if (!refs || refs.length === 0) return []
+
+  const out: InlineImage[] = []
+  for (const r of refs) {
+    try {
+      const dl = await supabase.storage.from('agent-references').download(r.storage_path)
+      if (dl.error || !dl.data) {
+        console.warn(`이미지 다운로드 실패 ${r.storage_path}:`, dl.error?.message)
+        continue
+      }
+      const buf = await dl.data.arrayBuffer()
+      const base64 = bytesToBase64(new Uint8Array(buf))
+      out.push({ mimeType: r.mime_type, base64 })
+    } catch (e) {
+      console.warn(`이미지 처리 예외 ${r.storage_path}:`, e)
+    }
+  }
+  return out
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize))
+  }
+  return btoa(binary)
+}
 
 async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<string> {
   const [
@@ -222,6 +276,16 @@ async function loadAgentPrompt(supabase: SbClient, agentId: string): Promise<str
     }
     if (ds.principles) prompt += '\n## 원칙·금기사항\n' + ds.principles + '\n'
     prompt += '\n⚠️ **이 디자인 시스템의 토큰을 정확히 따르세요.** 임의의 hex 색상·폰트·간격 값을 만들지 말고 위 정의된 값만 사용. 부득이하게 시스템에 없는 값을 써야 한다면 그 사유를 응답에 명시.\n'
+  }
+
+  // 참고 이미지 안내 (실제 이미지는 user prompt parts에 inline_data로 첨부됨)
+  const { count: imgCount } = await supabase
+    .from('agent_visual_references')
+    .select('id', { count: 'exact', head: true })
+    .eq('agent_id', agentId)
+    .eq('active', true)
+  if ((imgCount ?? 0) > 0) {
+    prompt += `\n\n# 참고 이미지 (Visual References)\n메시지에 ${imgCount}장의 이미지가 첨부되어 있습니다. 이 이미지들의 디자인 톤·레이아웃·컴포넌트 패턴·색감을 우선 참고하여 산출물에 반영하세요. 텍스트 설명과 이미지 사이에 모순이 있다면 이미지를 우선합니다.\n`
   }
 
   return prompt
@@ -357,9 +421,11 @@ async function runSubAgents(
   // deno-lint-ignore no-explicit-any
   const runOne = async (sub: any): Promise<SubAgentOutput> => {
     const systemPrompt = await loadAgentPrompt(supabase, sub.id)
+    const images = await loadAgentImages(supabase, sub.id)
     const raw = await callGemini({
       systemPrompt,
       userMessage: userPromptForSub,
+      images,
       model: sub.model ?? 'gemini-2.5-flash',
       temperature: 0.6,
       jsonMode: true,
@@ -798,6 +864,7 @@ ${JSON.stringify(opportunityMap.data, null, 2)}
 // --- JOI_DESIGNING (or JOI_REVISING) ---
 async function handleJoiDesigning(supabase: SbClient, mission: Mission): Promise<string> {
   const systemPrompt = await loadAgentPrompt(supabase, 'joi')
+  const joiImages = await loadAgentImages(supabase, 'joi')
 
   // Aki의 Blueprint 로드
   const blueprint = await getLatestDeliverable(supabase, mission.id, 'product_blueprint')
@@ -853,6 +920,7 @@ P0 기능 중 핵심 3~5개 화면을 HTML+TailwindCSS 코드로 작성하세요
   const joiResponse = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
+    images: joiImages,
     model: 'gemini-2.5-pro', // HTML 코드 품질 + Flash 503 회피
     temperature: 0.7,
     jsonMode: true,
@@ -1303,9 +1371,11 @@ ${contextParts}
 
   const userPrompt = `${contextParts}${specSubContext}\n\n위 정보를 바탕으로 당신의 전문 영역 보고서를 작성하세요. 하위팀이 있다면 그 결과를 종합·교차검증하여 반영. 시스템 프롬프트에 정의된 JSON 형식으로만 응답.`
 
+  const specImages = await loadAgentImages(supabase, specialistId)
   const response = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
+    images: specImages,
     model: config.model,
     temperature: 0.5,
     jsonMode: true,
@@ -1581,9 +1651,11 @@ ${blueprint ? JSON.stringify(blueprint.data, null, 2).slice(0, 4000) : '없음'}
   "design_notes": "변경 사항 요약"
 }`
 
+  const joiImages = await loadAgentImages(supabase, 'joi')
   const raw = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
+    images: joiImages,
     model: 'gemini-2.5-pro',
     temperature: 0.6,
     jsonMode: true,
@@ -1649,9 +1721,11 @@ ${currentHtml}
   "changes": ["변경 사항 1", "변경 사항 2"]
 }`
 
+  const joiImagesPatch = await loadAgentImages(supabase, 'joi')
   const raw = await callGemini({
     systemPrompt,
     userMessage: userPrompt,
+    images: joiImagesPatch,
     model: 'gemini-2.5-flash',
     temperature: 0.3,
     jsonMode: true,

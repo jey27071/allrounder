@@ -166,6 +166,37 @@ export type Database = {
         }
         Update: Partial<Database['public']['Tables']['agent_knowledge']['Insert']>
       }
+      agent_visual_references: {
+        Row: {
+          id: string
+          agent_id: AgentId
+          name: string
+          description: string | null
+          storage_path: string
+          mime_type: string
+          file_size: number | null
+          width: number | null
+          height: number | null
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: AgentId
+          name: string
+          description?: string | null
+          storage_path: string
+          mime_type: string
+          file_size?: number | null
+          width?: number | null
+          height?: number | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['agent_visual_references']['Insert']>
+      }
       agent_design_systems: {
         Row: {
           id: string

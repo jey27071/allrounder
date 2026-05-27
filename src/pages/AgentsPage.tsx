@@ -34,8 +34,9 @@ import KnowledgeFormModal from '@/components/KnowledgeFormModal'
 import ExampleFormModal from '@/components/ExampleFormModal'
 import PromptVersionModal from '@/components/PromptVersionModal'
 import DesignSystemFormModal from '@/components/DesignSystemFormModal'
+import VisualReferencesPanel from '@/components/VisualReferencesPanel'
 
-type Tab = 'prompt' | 'knowledge' | 'examples' | 'versions' | 'wisdom' | 'design'
+type Tab = 'prompt' | 'knowledge' | 'examples' | 'versions' | 'wisdom' | 'design' | 'visual'
 
 /**
  * 디자인 시스템 탭을 표시할 에이전트.
@@ -95,9 +96,9 @@ export default function AgentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
-  // 디자인 시스템 탭에 있는데 새 에이전트가 그 탭을 지원하지 않으면 폴백
+  // 디자인 시스템·비주얼 탭에 있는데 새 에이전트가 그 탭을 지원하지 않으면 폴백
   useEffect(() => {
-    if (tab === 'design') {
+    if (tab === 'design' || tab === 'visual') {
       const a = agents.find((x) => x.id === selectedId)
       if (a && !supportsDesignSystem(a)) setTab('prompt')
     }
@@ -397,6 +398,11 @@ export default function AgentsPage() {
             {supportsDesignSystem(selectedAgent) && (
               <TabButton current={tab} value="design" onClick={setTab} count={designSystems.length}>
                 디자인 시스템
+              </TabButton>
+            )}
+            {supportsDesignSystem(selectedAgent) && (
+              <TabButton current={tab} value="visual" onClick={setTab}>
+                참고 이미지
               </TabButton>
             )}
           </div>
@@ -705,6 +711,11 @@ export default function AgentsPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* VISUAL REFERENCES TAB */}
+            {tab === 'visual' && (
+              <VisualReferencesPanel agentId={selectedAgent.id} />
             )}
 
             {/* DESIGN SYSTEM TAB */}

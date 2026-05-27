@@ -110,7 +110,20 @@
     - `src/lib/screenExport.ts` — 화면별 .html, 통합 .html(page-break), JSON 백업
     - **Figma Tokens Studio 호환 JSON** — 시안에서 hex/폰트 자동 추출 또는 디자인 시스템 통째 변환
     - 디자이너 워크플로우: Figma > "Tokens Studio for Figma" plugin > Load from JSON에 paste
-  - **19-D 풀스크린·디태치·아트보드**:
+- **Phase 20**: 이미지 기반 학습 (Visual References)
+  - Supabase Storage bucket `agent-references` + 새 테이블 `agent_visual_references`
+  - 마이그레이션: `supabase/migrations/010_visual_references.sql`
+  - 라이브러리: `src/lib/visualReferences.ts` — 업로드/리스트/활성/삭제/signed URL
+  - UI: `src/components/VisualReferencesPanel.tsx` — 드래그·드롭, 썸네일, 활성 토글
+    - AgentsPage에 "참고 이미지" 탭 (비주얼 에이전트에만)
+    - 활성 한도: 5장 (토큰 비용 컨트롤)
+  - Edge Function: `loadAgentImages` 헬퍼 — Storage에서 다운로드 → base64 → Gemini `inline_data` 첨부
+    - 조이/타스 + 그 하위팀, specialist 모두 자동 첨부
+    - 조이의 화면 재생성·patch에서도 첨부
+  - 시스템 프롬프트에 이미지 첨부 안내 자동 삽입 ("이미지를 디자인 가이드로 우선 참고")
+  - 디자이너 경험: 로컬 폴더와 거의 동일 (브라우저 드래그·드롭, 모든 기기 접근)
+
+- **Phase 19-D 풀스크린·디태치·아트보드**:
     - 모달 크기 확장(`max-w-7xl`) + **⛶ 풀스크린** 토글 (전체 화면 차지)
     - **↗ 새 창** 버튼 — URL `/?view=screens&did=<id>`로 별도 창 열기 (보조 모니터 활용)
     - 디태치 페이지: `src/pages/ScreensFullscreenPage.tsx` (사이드바·헤더 없는 풀화면)
