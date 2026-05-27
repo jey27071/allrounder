@@ -1,0 +1,35 @@
+name: Deploy Supabase Edge Functions
+
+# supabase/functions/ 안의 파일이 변경되어 main에 push되면 자동으로 재배포.
+# 일회성 설정:
+#   GitHub repo > Settings > Secrets and variables > Actions > New repository secret
+#     - Name:  SUPABASE_ACCESS_TOKEN
+#     - Value: https://supabase.com/dashboard/account/tokens 에서 발급받은 토큰
+#
+# 그 외 PROJECT_REF는 아래에 inline (앱 URL에 이미 노출되는 값이라 비밀 아님).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+  workflow_dispatch: {} # Actions 탭에서 수동 실행도 가능
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy orchestrate function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          supabase functions deploy orchestrate \
+            --project-ref kpnrdalcspiqdbvaaepq
