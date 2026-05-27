@@ -5,6 +5,7 @@ import MissionsPage from '@/pages/MissionsPage'
 import AgentsPage from '@/pages/AgentsPage'
 import HistoryPage from '@/pages/HistoryPage'
 import SettingsPage from '@/pages/SettingsPage'
+import ScreensFullscreenPage from '@/pages/ScreensFullscreenPage'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import type { Mission } from '@/types/app'
 
@@ -18,6 +19,20 @@ function App() {
   function handleNewMission() {
     setCurrentPage('missions')
     setNewMissionModalOpen(true)
+  }
+
+  // URL ?view=screens&did=... 진입 시 풀화면 페이지 (디태치 모드)
+  // hooks 호출 뒤에서 분기 (React 규칙)
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('view') === 'screens') {
+    const did = params.get('did')
+    if (did) {
+      return (
+        <ErrorBoundary label="시안 풀화면">
+          <ScreensFullscreenPage deliverableId={did} />
+        </ErrorBoundary>
+      )
+    }
   }
 
   return (

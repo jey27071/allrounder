@@ -8,6 +8,7 @@ import {
   downloadScreenTokensAsTokensStudio,
 } from '@/lib/screenExport'
 import { regenerateScreen, patchScreen, updateScreenHtml } from '@/lib/orchestrate'
+import ScreensCanvas from './ScreensCanvas'
 
 interface DeliverableViewerModalProps {
   deliverable: Deliverable
@@ -77,6 +78,15 @@ export default function DeliverableViewerModal({
   const [busy, setBusy] = useState(false)
   const [opMessage, setOpMessage] = useState<string | null>(null)
 
+  // Phase 19-D: 풀스크린 / 캔버스 모드
+  const [fullscreen, setFullscreen] = useState(false)
+  const [viewMode, setViewMode] = useState<'single' | 'canvas'>('single')
+
+  function openInNewWindow() {
+    const url = `${window.location.origin}/?view=screens&did=${deliverable.id}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   function startHtmlEdit() {
     setDraftHtml(current?.html ?? current?.html_tailwind ?? '')
     setEditMode('html')
@@ -137,10 +147,14 @@ export default function DeliverableViewerModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-lg shadow-lg w-full max-w-5xl max-h-[92vh] flex flex-col"
+        className={`bg-white shadow-lg flex flex-col ${
+          fullscreen
+            ? 'w-screen h-screen rounded-none'
+            : 'w-full max-w-7xl max-h-[95vh] rounded-lg'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 border-b border-border flex items-start justify-between gap-4">
+        <div className="p-4 border-b border-border flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-bold">{label}</span>
@@ -159,11 +173,48 @@ export default function DeliverableViewerModal({
                 {deliverable.status}
               </span>
             </div>
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-gray-500 truncate">
               {agent} · {missionTitle}
               {deliverable.review_score != null && ` · 점수 ${deliverable.review_score}/20`}
             </div>
           </div>
+
+          {/* Phase 19-D: 뷰 모드 + 풀스크린 + 디태치 */}
+          {isScreenDesigns && screens.length > 0 && (
+            <>
+              <div className="flex items-center gap-1 border border-border rounded">
+                <button
+                  onClick={() => setViewMode('single')}
+                  className={`text-xs px-3 py-1 ${viewMode === 'single' ? 'bg-primary text-white' : 'bg-white text-gray-700'}`}
+                  title="한 화면씩 보기"
+                >
+                  📱 단일
+                </button>
+                <button
+                  onClick={() => setViewMode('canvas')}
+                  className={`text-xs px-3 py-1 ${viewMode === 'canvas' ? 'bg-primary text-white' : 'bg-white text-gray-700'}`}
+                  title="아트보드(캔버스)에 모두 펼치기"
+                >
+                  🗺 캔버스
+                </button>
+              </div>
+              <button
+                onClick={() => setFullscreen((v) => !v)}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-gray-50"
+                title={fullscreen ? '원래 크기' : '풀스크린'}
+              >
+                {fullscreen ? '⤧ 원래 크기' : '⛶ 풀스크린'}
+              </button>
+              <button
+                onClick={openInNewWindow}
+                className="text-xs px-2 py-1 rounded border border-border hover:bg-gray-50"
+                title="새 창에서 풀화면으로 열기 (보조 모니터 추천)"
+              >
+                ↗ 새 창
+              </button>
+            </>
+          )}
+
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-700 text-xl leading-none px-2"
@@ -174,7 +225,9 @@ export default function DeliverableViewerModal({
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden flex">
-          {isScreenDesigns && screens.length > 0 ? (
+          {isScreenDesigns && screens.length > 0 && viewMode === 'canvas' ? (
+            <ScreensCanvas screens={screens} />
+          ) : isScreenDesigns && screens.length > 0 ? (
             <>
               <div className="w-56 border-r border-border overflow-y-auto p-4 space-y-2 shrink-0 bg-gray-50">
                 <div className="text-xs font-medium text-gray-500 mb-2">화면 ({screens.length})</div>

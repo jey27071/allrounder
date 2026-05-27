@@ -110,6 +110,14 @@
     - `src/lib/screenExport.ts` — 화면별 .html, 통합 .html(page-break), JSON 백업
     - **Figma Tokens Studio 호환 JSON** — 시안에서 hex/폰트 자동 추출 또는 디자인 시스템 통째 변환
     - 디자이너 워크플로우: Figma > "Tokens Studio for Figma" plugin > Load from JSON에 paste
+  - **19-D 풀스크린·디태치·아트보드**:
+    - 모달 크기 확장(`max-w-7xl`) + **⛶ 풀스크린** 토글 (전체 화면 차지)
+    - **↗ 새 창** 버튼 — URL `/?view=screens&did=<id>`로 별도 창 열기 (보조 모니터 활용)
+    - 디태치 페이지: `src/pages/ScreensFullscreenPage.tsx` (사이드바·헤더 없는 풀화면)
+    - **🗺 캔버스 모드** — Google Stitch 스타일 무한 캔버스: `src/components/ScreensCanvas.tsx`
+      - 자동 그리드 배치 (가로 √N 열), 마우스 휠 줌, 드래그 팬, Fit/Reset 버튼
+      - 외부 라이브러리 없이 transform: scale + translate로 직접 구현
+      - 줌 50% 이상이면 화면 내부 인터랙션 가능
   - **19-C 정교 수정** (Edge Function 새 액션 3개):
     - `regenerate_screen` (Gemini Pro): 단일 화면만 재생성. 다른 화면 변경 없음
     - `patch_screen` (Gemini Flash): 자연어 명령으로 최소 변경 patch ("이 카드 배경만 #fff로")
