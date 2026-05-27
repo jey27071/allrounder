@@ -18,6 +18,7 @@ import {
   setActiveDesignSystem,
   deleteDesignSystem,
 } from '@/lib/designSystems'
+import { downloadTokensStudioJson } from '@/lib/screenExport'
 import type {
   Agent,
   AgentId,
@@ -749,6 +750,13 @@ export default function AgentsPage() {
                               )}
                             </div>
                             <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={() => downloadTokensStudioJson(ds)}
+                                className="text-[10px] px-1.5 py-0.5 rounded border border-primary text-primary hover:bg-primary/5"
+                                title="Figma > Tokens Studio plugin > Import에 paste 가능한 JSON 다운로드"
+                              >
+                                🎨 Figma용 export
+                              </button>
                               <button
                                 onClick={() => {
                                   setEditingDesign(ds)

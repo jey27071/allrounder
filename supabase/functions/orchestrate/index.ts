@@ -1514,6 +1514,200 @@ ${JSON.stringify(oppMap.data, null, 2)}
 }
 
 // ============================================================
+// 시안 부분 수정 (Phase 19-C)
+// ============================================================
+
+/** 가장 최근 screen_designs deliverable 가져오기. update 시 새 row 만들지 않고 in-place update */
+async function loadLatestScreenDesigns(supabase: SbClient, missionId: string) {
+  const { data } = await supabase
+    .from('deliverables')
+    .select('*')
+    .eq('mission_id', missionId)
+    .eq('type', 'screen_designs')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+  return data
+}
+
+async function saveScreenDesignsUpdate(
+  supabase: SbClient,
+  deliverableId: string,
+  // deno-lint-ignore no-explicit-any
+  newData: any,
+) {
+  await supabase.from('deliverables').update({ data: newData }).eq('id', deliverableId)
+}
+
+// deno-lint-ignore no-explicit-any
+async function handleRegenerateScreen(supabase: SbClient, mission: Mission, body: any) {
+  const idx = body.screen_index
+  const instruction: string = body.instruction ?? ''
+  if (typeof idx !== 'number') throw new Error('screen_index required')
+  const deliverable = await loadLatestScreenDesigns(supabase, mission.id)
+  if (!deliverable) throw new Error('screen_designs deliverable not found')
+  const data = deliverable.data
+  // deno-lint-ignore no-explicit-any
+  const screens: any[] = data?.screens ?? []
+  if (!screens[idx]) throw new Error(`screen index out of range: ${idx}`)
+  const target = screens[idx]
+
+  const blueprint = await getLatestDeliverable(supabase, mission.id, 'product_blueprint')
+
+  const systemPrompt = await loadAgentPrompt(supabase, 'joi')
+  const userPrompt = `[단일 화면 재생성 요청]
+
+전체 시안 중 #${idx + 1}번 화면 "${target.name ?? ''}" 만 다시 만들어주세요.
+다른 화면은 변경하지 않습니다.
+
+화면 정보:
+- 이름: ${target.name}
+- 목적: ${target.purpose}
+${instruction ? `\n[디렉터 추가 지시]\n${instruction}\n` : ''}
+
+기존 HTML (참고용 — 개선해서 다시 작성):
+\`\`\`html
+${target.html ?? target.html_tailwind ?? ''}
+\`\`\`
+
+Blueprint 데이터:
+${blueprint ? JSON.stringify(blueprint.data, null, 2).slice(0, 4000) : '없음'}
+
+⚠️ 출력 형식 — JSON only. 이 한 화면의 새 정보:
+{
+  "name": "화면 이름",
+  "purpose": "목적",
+  "html": "HTML+TailwindCSS 코드 (body 안 들어갈 마크업만)",
+  "design_notes": "변경 사항 요약"
+}`
+
+  const raw = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: 'gemini-2.5-pro',
+    temperature: 0.6,
+    jsonMode: true,
+  })
+  // deno-lint-ignore no-explicit-any
+  const parsed: any = parseLooseJson(raw)
+  if (!parsed || !parsed.html) throw new Error('재생성 응답 파싱 실패')
+
+  // 해당 인덱스 교체
+  screens[idx] = {
+    ...target,
+    name: parsed.name ?? target.name,
+    purpose: parsed.purpose ?? target.purpose,
+    html: parsed.html,
+    design_notes: parsed.design_notes ?? target.design_notes,
+  }
+  data.screens = screens
+  await saveScreenDesignsUpdate(supabase, deliverable.id, data)
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'joi',
+    recipient: 'director',
+    re: `화면 재생성: ${target.name}`,
+    type: 'StatusUpdate',
+    content: `🔄 #${idx + 1}번 "${target.name}" 화면을 재생성했습니다.${instruction ? `\n\n_요청: ${instruction}_` : ''}`,
+    metadata: { kind: 'screen_regenerated', screen_index: idx },
+  })
+
+  return { note: '화면 재생성 완료', screen_index: idx }
+}
+
+// deno-lint-ignore no-explicit-any
+async function handlePatchScreen(supabase: SbClient, mission: Mission, body: any) {
+  const idx = body.screen_index
+  const instruction: string = body.instruction ?? ''
+  if (typeof idx !== 'number') throw new Error('screen_index required')
+  if (!instruction.trim()) throw new Error('instruction required')
+
+  const deliverable = await loadLatestScreenDesigns(supabase, mission.id)
+  if (!deliverable) throw new Error('screen_designs deliverable not found')
+  const data = deliverable.data
+  // deno-lint-ignore no-explicit-any
+  const screens: any[] = data?.screens ?? []
+  if (!screens[idx]) throw new Error(`screen index out of range: ${idx}`)
+  const target = screens[idx]
+  const currentHtml = target.html ?? target.html_tailwind ?? ''
+
+  const systemPrompt = await loadAgentPrompt(supabase, 'joi')
+  const userPrompt = `[부분 patch 요청 — 최소한의 변경으로]
+
+화면: ${target.name}
+디렉터 지시: ${instruction}
+
+현재 HTML (이 코드를 최소한만 수정):
+\`\`\`html
+${currentHtml}
+\`\`\`
+
+⚠️ 출력 — JSON only:
+{
+  "html": "수정된 전체 HTML (구조는 최대한 유지, 지시된 부분만 변경)",
+  "changes": ["변경 사항 1", "변경 사항 2"]
+}`
+
+  const raw = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    model: 'gemini-2.5-flash',
+    temperature: 0.3,
+    jsonMode: true,
+  })
+  // deno-lint-ignore no-explicit-any
+  const parsed: any = parseLooseJson(raw)
+  if (!parsed || !parsed.html) throw new Error('patch 응답 파싱 실패')
+
+  screens[idx] = { ...target, html: parsed.html }
+  data.screens = screens
+  await saveScreenDesignsUpdate(supabase, deliverable.id, data)
+
+  const changes = Array.isArray(parsed.changes) ? parsed.changes : []
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'joi',
+    recipient: 'director',
+    re: `화면 patch: ${target.name}`,
+    type: 'StatusUpdate',
+    content: `🎯 #${idx + 1}번 "${target.name}"에 patch 적용했습니다.\n\n_요청:_ ${instruction}${changes.length > 0 ? `\n\n변경 사항:\n${changes.map((c: string) => `- ${c}`).join('\n')}` : ''}`,
+    metadata: { kind: 'screen_patched', screen_index: idx },
+  })
+
+  return { note: 'patch 완료', screen_index: idx }
+}
+
+/** 디렉터가 직접 편집한 HTML을 그대로 저장 (LLM 호출 없음) */
+// deno-lint-ignore no-explicit-any
+async function handleUpdateScreenHtml(supabase: SbClient, mission: Mission, body: any) {
+  const idx = body.screen_index
+  const html: string = body.html ?? ''
+  if (typeof idx !== 'number') throw new Error('screen_index required')
+
+  const deliverable = await loadLatestScreenDesigns(supabase, mission.id)
+  if (!deliverable) throw new Error('screen_designs deliverable not found')
+  const data = deliverable.data
+  // deno-lint-ignore no-explicit-any
+  const screens: any[] = data?.screens ?? []
+  if (!screens[idx]) throw new Error(`screen index out of range: ${idx}`)
+  screens[idx] = { ...screens[idx], html }
+  data.screens = screens
+  await saveScreenDesignsUpdate(supabase, deliverable.id, data)
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'director',
+    type: 'UserInput',
+    re: `화면 직접 편집: ${screens[idx].name ?? ''}`,
+    content: `✏️ 디렉터가 #${idx + 1}번 화면 HTML을 직접 편집했습니다.`,
+    metadata: { kind: 'screen_html_edited', screen_index: idx },
+  })
+
+  return { note: '직접 편집 저장 완료', screen_index: idx }
+}
+
+// ============================================================
 // 인공 지혜 추출 (글로벌 액션)
 // ============================================================
 
@@ -1662,6 +1856,15 @@ Deno.serve(async (req) => {
       newState = await handleSpecialistInvocation(supabase, mission, specialist_id)
     } else if (action === 'generate_slides') {
       const result = await handleGenerateSlides(supabase, mission)
+      return jsonResp({ ok: true, ...result }, 200)
+    } else if (action === 'regenerate_screen') {
+      const result = await handleRegenerateScreen(supabase, mission, body)
+      return jsonResp({ ok: true, ...result }, 200)
+    } else if (action === 'patch_screen') {
+      const result = await handlePatchScreen(supabase, mission, body)
+      return jsonResp({ ok: true, ...result }, 200)
+    } else if (action === 'update_screen_html') {
+      const result = await handleUpdateScreenHtml(supabase, mission, body)
       return jsonResp({ ok: true, ...result }, 200)
     } else {
       // 자동 진행 (상태 기반)

@@ -12,11 +12,17 @@ export interface OrchestrateResponse {
 
 interface OrchestratePayload {
   mission_id: string
-  action?: 'cp1' | 'cp2' | 'cp3' | 'specialist' | 'generate_slides'
+  action?:
+    | 'cp1' | 'cp2' | 'cp3'
+    | 'specialist' | 'generate_slides'
+    | 'regenerate_screen' | 'patch_screen' | 'update_screen_html'
   selected_candidate_index?: number
   decision?: 'approve' | 'revise' | 'branch'
   comments?: string
   specialist_id?: string
+  screen_index?: number
+  instruction?: string
+  html?: string
 }
 
 async function callOrchestrate(payload: OrchestratePayload): Promise<OrchestrateResponse> {
@@ -106,5 +112,47 @@ export async function generateSlides(missionId: string): Promise<OrchestrateResp
   return callOrchestrate({
     mission_id: missionId,
     action: 'generate_slides',
+  })
+}
+
+/** 단일 화면 재생성 (Phase 19-C) — Gemini Pro 1번 호출 */
+export async function regenerateScreen(
+  missionId: string,
+  screenIndex: number,
+  instruction?: string,
+): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'regenerate_screen',
+    screen_index: screenIndex,
+    instruction,
+  })
+}
+
+/** 자연어 patch (Phase 19-C) — Gemini Flash 1번 호출 */
+export async function patchScreen(
+  missionId: string,
+  screenIndex: number,
+  instruction: string,
+): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'patch_screen',
+    screen_index: screenIndex,
+    instruction,
+  })
+}
+
+/** 직접 편집한 HTML을 저장 (LLM 호출 없음) */
+export async function updateScreenHtml(
+  missionId: string,
+  screenIndex: number,
+  html: string,
+): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'update_screen_html',
+    screen_index: screenIndex,
+    html,
   })
 }

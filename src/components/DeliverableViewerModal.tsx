@@ -1,6 +1,13 @@
 import { useState } from 'react'
 import type { Deliverable, AgentId } from '@/types/app'
 import ScreenPreview from './ScreenPreview'
+import {
+  downloadScreenHtml,
+  downloadScreenDesignsJson,
+  downloadScreensCombinedHtml,
+  downloadScreenTokensAsTokensStudio,
+} from '@/lib/screenExport'
+import { regenerateScreen, patchScreen, updateScreenHtml } from '@/lib/orchestrate'
 
 interface DeliverableViewerModalProps {
   deliverable: Deliverable
@@ -62,6 +69,67 @@ export default function DeliverableViewerModal({
   const [activeScreen, setActiveScreen] = useState(0)
   const screens = isScreenDesigns ? data?.screens ?? [] : []
   const current = screens[activeScreen]
+
+  // Phase 19-C: 편집·재생성·patch 상태
+  const [editMode, setEditMode] = useState<'view' | 'html' | 'patch' | 'regen'>('view')
+  const [draftHtml, setDraftHtml] = useState('')
+  const [instruction, setInstruction] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [opMessage, setOpMessage] = useState<string | null>(null)
+
+  function startHtmlEdit() {
+    setDraftHtml(current?.html ?? current?.html_tailwind ?? '')
+    setEditMode('html')
+    setOpMessage(null)
+  }
+
+  async function handleSaveHtmlEdit() {
+    if (busy) return
+    setBusy(true)
+    setOpMessage(null)
+    const r = await updateScreenHtml(deliverable.mission_id, activeScreen, draftHtml)
+    setBusy(false)
+    if (!r.ok) {
+      setOpMessage('⚠ 저장 실패: ' + (r.error ?? r.detail ?? ''))
+      return
+    }
+    setOpMessage('✓ 저장됨. 모달을 닫았다가 다시 열면 반영됩니다.')
+    // 로컬 데이터도 즉시 반영
+    if (current) (current as ScreenItem).html = draftHtml
+    setEditMode('view')
+  }
+
+  async function handlePatch() {
+    if (busy || !instruction.trim()) return
+    if (!confirm(`이 화면에 다음 patch를 적용합니다.\n\n"${instruction}"\n\nGemini Flash 1회 호출. 진행할까요?`)) return
+    setBusy(true)
+    setOpMessage(null)
+    const r = await patchScreen(deliverable.mission_id, activeScreen, instruction.trim())
+    setBusy(false)
+    if (!r.ok) {
+      setOpMessage('⚠ patch 실패: ' + (r.error ?? r.detail ?? ''))
+      return
+    }
+    setOpMessage('✓ patch 완료. 모달을 닫았다가 다시 열면 새 시안이 보입니다.')
+    setInstruction('')
+    setEditMode('view')
+  }
+
+  async function handleRegenerate() {
+    if (busy) return
+    if (!confirm(`#${activeScreen + 1}번 "${current?.name ?? ''}" 화면을 다시 만듭니다. Gemini Pro 1회 호출, 30~60초.\n진행할까요?`)) return
+    setBusy(true)
+    setOpMessage(null)
+    const r = await regenerateScreen(deliverable.mission_id, activeScreen, instruction.trim() || undefined)
+    setBusy(false)
+    if (!r.ok) {
+      setOpMessage('⚠ 재생성 실패: ' + (r.error ?? r.detail ?? ''))
+      return
+    }
+    setOpMessage('✓ 재생성 완료. 모달을 닫았다가 다시 열면 새 화면이 보입니다.')
+    setInstruction('')
+    setEditMode('view')
+  }
 
   return (
     <div
@@ -128,17 +196,173 @@ export default function DeliverableViewerModal({
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {current && (
                   <>
-                    <div>
-                      <h3 className="font-bold text-base mb-1">{current.name}</h3>
-                      <p className="text-sm text-gray-600">{current.purpose}</p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-base mb-1">{current.name}</h3>
+                        <p className="text-sm text-gray-600">{current.purpose}</p>
+                      </div>
+                      <div className="flex flex-col gap-1 shrink-0">
+                        <button
+                          onClick={() =>
+                            downloadScreenHtml(current.name, current.html ?? current.html_tailwind ?? '')
+                          }
+                          className="text-[10px] px-2 py-1 rounded border border-border hover:bg-gray-50"
+                          title="이 화면을 .html 파일로 다운로드"
+                        >
+                          ⬇ 이 화면 .html
+                        </button>
+                      </div>
                     </div>
-                    <ScreenPreview html={current.html ?? current.html_tailwind ?? ''} height={500} />
-                    {current.design_notes && (
+                    {editMode === 'html' ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">HTML 직접 편집</div>
+                          <textarea
+                            value={draftHtml}
+                            onChange={(e) => setDraftHtml(e.target.value)}
+                            rows={20}
+                            className="w-full border border-border rounded p-2 text-[11px] font-mono focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">즉시 미리보기</div>
+                          <ScreenPreview html={draftHtml} height={420} />
+                        </div>
+                      </div>
+                    ) : (
+                      <ScreenPreview html={current.html ?? current.html_tailwind ?? ''} height={500} />
+                    )}
+                    {current.design_notes && editMode === 'view' && (
                       <div className="p-3 bg-gray-50 rounded text-xs leading-relaxed">
                         <strong>디자인 노트:</strong>
                         <div className="mt-1 text-gray-700">{current.design_notes}</div>
                       </div>
                     )}
+
+                    {/* Phase 19-C: 정교 수정 컨트롤 */}
+                    <div className="border border-border rounded p-3 bg-gray-50/50">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[11px] font-medium text-gray-700">🛠 이 화면만 수정</span>
+                        <div className="ml-auto flex gap-1">
+                          <button
+                            onClick={() => setEditMode('view')}
+                            className={`text-[10px] px-2 py-1 rounded border ${editMode === 'view' ? 'border-primary bg-primary text-white' : 'border-border bg-white'}`}
+                          >
+                            보기
+                          </button>
+                          <button
+                            onClick={() => setEditMode('patch')}
+                            className={`text-[10px] px-2 py-1 rounded border ${editMode === 'patch' ? 'border-primary bg-primary text-white' : 'border-border bg-white'}`}
+                          >
+                            🎯 자연어 patch
+                          </button>
+                          <button
+                            onClick={() => setEditMode('regen')}
+                            className={`text-[10px] px-2 py-1 rounded border ${editMode === 'regen' ? 'border-primary bg-primary text-white' : 'border-border bg-white'}`}
+                          >
+                            🔄 재생성
+                          </button>
+                          <button
+                            onClick={editMode === 'html' ? () => setEditMode('view') : startHtmlEdit}
+                            className={`text-[10px] px-2 py-1 rounded border ${editMode === 'html' ? 'border-primary bg-primary text-white' : 'border-border bg-white'}`}
+                          >
+                            ✏️ HTML 편집
+                          </button>
+                        </div>
+                      </div>
+
+                      {editMode === 'patch' && (
+                        <div className="space-y-2">
+                          <textarea
+                            value={instruction}
+                            onChange={(e) => setInstruction(e.target.value)}
+                            rows={3}
+                            placeholder={'예: 상단 카드의 배경색만 #FAFAF9로 바꿔 / "오늘의 미션" 글자 크기를 24px로 키워'}
+                            className="w-full border border-border rounded p-2 text-xs focus:outline-none focus:border-primary"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => void handlePatch()}
+                              disabled={busy || !instruction.trim()}
+                              className="text-xs px-3 py-1.5 rounded bg-primary text-white hover:opacity-90 disabled:opacity-40"
+                            >
+                              {busy ? '⏳ patch 중...' : 'patch 적용 (Flash 1회)'}
+                            </button>
+                            <span className="text-[10px] text-gray-500">최소한의 변경으로 HTML이 수정됩니다.</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {editMode === 'regen' && (
+                        <div className="space-y-2">
+                          <textarea
+                            value={instruction}
+                            onChange={(e) => setInstruction(e.target.value)}
+                            rows={3}
+                            placeholder={'(선택) 재생성 시 반영할 추가 지시. 비워두면 기존 정보로만 새로 만듭니다.'}
+                            className="w-full border border-border rounded p-2 text-xs focus:outline-none focus:border-primary"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => void handleRegenerate()}
+                              disabled={busy}
+                              className="text-xs px-3 py-1.5 rounded bg-primary text-white hover:opacity-90 disabled:opacity-40"
+                            >
+                              {busy ? '⏳ 재생성 중...' : '이 화면만 재생성 (Pro 1회, 30~60초)'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {editMode === 'html' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => void handleSaveHtmlEdit()}
+                            disabled={busy}
+                            className="text-xs px-3 py-1.5 rounded bg-primary text-white hover:opacity-90 disabled:opacity-40"
+                          >
+                            {busy ? '⏳ 저장 중...' : '✓ 편집 저장 (LLM 호출 없음)'}
+                          </button>
+                          <button
+                            onClick={() => setEditMode('view')}
+                            disabled={busy}
+                            className="text-xs px-3 py-1.5 rounded border border-border hover:bg-gray-50 disabled:opacity-40"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      )}
+
+                      {opMessage && (
+                        <div className={`mt-2 p-2 rounded text-[11px] ${opMessage.startsWith('⚠') ? 'bg-warning/10 text-warning border border-warning/30' : 'bg-success/10 text-success border border-success/30'}`}>
+                          {opMessage}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 전체 시안 export */}
+                    <div className="pt-4 border-t border-border flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] text-gray-500">전체 시안 export:</span>
+                      <button
+                        onClick={() => downloadScreensCombinedHtml(missionTitle, data)}
+                        className="text-[10px] px-2 py-1 rounded border border-border hover:bg-gray-50"
+                      >
+                        ⬇ 모든 화면 통합 .html
+                      </button>
+                      <button
+                        onClick={() => downloadScreenDesignsJson(missionTitle, data)}
+                        className="text-[10px] px-2 py-1 rounded border border-border hover:bg-gray-50"
+                      >
+                        ⬇ JSON 백업
+                      </button>
+                      <button
+                        onClick={() => downloadScreenTokensAsTokensStudio(missionTitle, data)}
+                        className="text-[10px] px-2 py-1 rounded border border-primary text-primary hover:bg-primary/5"
+                        title="시안에서 사용된 색상·폰트를 Figma Tokens Studio 형식 JSON으로 추출"
+                      >
+                        🎨 Figma Tokens Studio용 토큰 추출
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
