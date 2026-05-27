@@ -1813,40 +1813,72 @@ async function handlePostCompletionMessage(
     return { note: `메시지는 ${lastMsg.recipient}에게 향함 — 자비스 답변 skip` }
   }
 
-  // 산출물 요약 (자비스 컨텍스트)
+  // 산출물 메타 + 핵심 데이터 일부도 함께 (실제 내용을 알고 답변할 수 있게)
   const { data: deliverables } = await supabase
     .from('deliverables')
-    .select('type, version, status, created_by')
+    .select('type, version, status, created_by, data')
     .eq('mission_id', mission.id)
     .order('created_at', { ascending: true })
 
-  const deliverableList =
-    (deliverables ?? [])
-      .map((d: { type: string; version: string; status: string; created_by: string }) => `- ${d.type} v${d.version} · ${d.created_by} · ${d.status}`)
-      .join('\n') || '(없음)'
+  // deno-lint-ignore no-explicit-any
+  const deliverableContext = (deliverables ?? []).map((d: any) => {
+    // 각 산출물의 핵심만 요약 (전체 JSON은 너무 김)
+    // deno-lint-ignore no-explicit-any
+    const data = (d.data ?? {}) as any
+    let summary = ''
+    if (d.type === 'opportunity_map') {
+      summary = data.tldr ?? data.summary ?? ''
+      const cands = Array.isArray(data.candidates) ? data.candidates : []
+      if (cands.length > 0) {
+        summary += '\n  후보: ' + cands.map((c: { number: number; name: string; total?: number }) => `#${c.number} ${c.name} (${c.total ?? '-'}/20)`).join(', ')
+      }
+    } else if (d.type === 'product_blueprint') {
+      summary = data.concept?.one_liner ?? data.product_name ?? ''
+      if (data.persona?.name) summary += `\n  페르소나: ${data.persona.name}`
+      const p0 = Array.isArray(data.features?.p0) ? data.features.p0 : []
+      if (p0.length > 0) summary += `\n  P0 기능: ${p0.map((f: { name: string }) => f.name).join(', ')}`
+    } else if (d.type === 'screen_designs') {
+      summary = data.design_intent?.slice(0, 200) ?? ''
+      const scrs = Array.isArray(data.screens) ? data.screens : []
+      if (scrs.length > 0) summary += `\n  화면: ${scrs.map((s: { name: string }) => s.name).join(', ')}`
+    } else if (d.type === 'slide_deck') {
+      summary = data.title ?? ''
+      const slides = Array.isArray(data.slides) ? data.slides : []
+      if (slides.length > 0) summary += ` (${slides.length}장)`
+    } else if (typeof data.executive_summary === 'string') {
+      summary = data.executive_summary.slice(0, 200)
+    } else if (typeof data.audit_summary === 'string') {
+      summary = data.audit_summary.slice(0, 200)
+    } else if (typeof data.summary === 'string') {
+      summary = data.summary.slice(0, 200)
+    }
+    return `- ${d.type} v${d.version} (${d.created_by}, ${d.status})${summary ? '\n  ' + summary : ''}`
+  }).join('\n') || '(없음)'
 
   const systemPrompt = await loadAgentPrompt(supabase, 'jarvis')
-  const userPrompt = `[미션 완료 후 디렉터의 사후 질문 — 답변 요청]
+  const userPrompt = `[디렉터의 사후 질문에 대한 답변]
 
-미션 컨텍스트:
+이 미션과 산출물을 당신은 이미 다 알고 있습니다. 디렉터의 질문에 직접·구체적으로 답하세요.
+
+미션:
 - 제목: ${mission.title}
 - 도메인: ${mission.domain}
 - 임무: ${mission.charter}
-${mission.context ? `- 부가 컨텍스트: ${mission.context}` : ''}
-- 현재 상태: ${mission.current_state}
+${mission.context ? `- 컨텍스트: ${mission.context}` : ''}
 
-생성된 산출물:
-${deliverableList}
+산출물과 핵심 내용:
+${deliverableContext}
 
 디렉터의 질문:
 "${lastMsg.content}"
 
-위 컨텍스트를 바탕으로 디렉터의 질문에 답하세요.
-- 미션은 이미 완료된 상태입니다. 새 워크플로우를 자동 시작하지 마세요.
-- 추가 검수가 필요하면 적절한 specialist를 안내 (Friday/TARS/Echo/KITT/Ethica/QA봇/워디).
-- 큰 변경이 필요하면 새 미션을 만들 것을 권장.
-- 산출물 수정이 필요하면 디자인 시안 뷰어의 [화면 재생성/patch] 기능을 안내.
-- 짧고 명확하게, 2~5문장. 한국어.`
+⚠️ 답변 지침:
+1. **질문에 직접 답하세요.** 산출물 데이터를 근거로 의견·평가·아이디어·요약을 제공.
+2. 추측이 들어가면 "(추정)" 표시. 모르면 "산출물에 없어 확신할 수 없어요"라고 솔직히.
+3. "specialist 호출하세요" 같은 매뉴얼 안내는 디렉터가 명시적으로 "다음에 뭘 해야 해?"라고 물을 때만, 그것도 답변 끝에 짧게 1줄.
+4. "새 미션을 시작하세요" 식 권장도 정말 큰 방향 전환이 필요할 때만.
+5. 디렉터가 카피·문구·텍스트 관련 질문이면 워디(UX 라이팅 전문가) 답변에 더 적합하다고 짧게 언급.
+6. 한국어, 자연스러운 대화체로 2~6문장.`
 
   const reply = await callGemini({
     systemPrompt,
