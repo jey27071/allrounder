@@ -1873,6 +1873,22 @@ async function handlePostCompletionMessage(
     return `- ${d.type} v${d.version} (${d.created_by}, ${d.status})${summary ? '\n  ' + summary : ''}`
   }).join('\n') || '(없음)'
 
+  // specialist 호출 여부 진단 (디렉터 질문이 specialist 관련일 때 정확한 안내 가능)
+  // deno-lint-ignore no-explicit-any
+  const calledSpecialists = new Set<string>((deliverables ?? []).map((d: any) => d.created_by).filter((c: string) => !['lumi', 'aki', 'joi', 'jarvis', 'director'].includes(c)))
+  const KNOWN_SPECIALISTS = [
+    { id: 'wordy', name: '워디', area: 'UX 라이팅·마이크로 카피' },
+    { id: 'friday', name: '프라이데이', area: '사업화·BM·GTM' },
+    { id: 'tars', name: '타스', area: 'React 코드 변환' },
+    { id: 'echo', name: '에코', area: '접근성(WCAG) 검수' },
+    { id: 'kitt', name: '키트', area: '법무 1차 검토' },
+    { id: 'ethica', name: '에씨카', area: '윤리·사회 영향' },
+    { id: 'qa_bot', name: 'QA봇', area: '테스트 케이스' },
+  ]
+  const specialistStatus = KNOWN_SPECIALISTS
+    .map((s) => `- ${s.name} (${s.area}): ${calledSpecialists.has(s.id) ? '✓ 이 미션에서 호출됨 (산출물 있음)' : '✗ 호출되지 않음'}`)
+    .join('\n')
+
   const systemPrompt = await loadAgentPrompt(supabase, 'jarvis')
   const userPrompt = `[디렉터의 사후 질문에 대한 답변]
 
@@ -1884,21 +1900,27 @@ async function handlePostCompletionMessage(
 - 임무: ${mission.charter}
 ${mission.context ? `- 컨텍스트: ${mission.context}` : ''}
 
-산출물과 핵심 내용:
+생성된 산출물과 핵심 내용:
 ${deliverableContext}
+
+각 specialist의 이 미션 호출 여부 (반드시 확인!):
+${specialistStatus}
 
 디렉터의 질문:
 "${lastMsg.content}"
 
 ⚠️ 답변 지침:
 1. **질문에 직접 답하세요.** 산출물 데이터를 근거로 의견·평가·아이디어·요약을 제공.
-2. 위 산출물 정보가 보이면 그 안의 내용을 인용·참고해서 답변. "산출물에 적용된지 모르겠다" 같은 회피 답변 금지.
-3. 디렉터가 **행동 명령**("다시 만들어줘", "수정해줘", "적용해줘")을 하면:
-   - 산출물에 관련 데이터(예: 워디 audit, 검수 결과)가 있으면 그 핵심을 1~3개 인용·요약
-   - **구체적 다음 단계** 안내: "디자인 시안 모달 → 화면 단위 [🎯 자연어 patch]에 '워디의 #N번 개선안 적용' 같이 명령하시면 됩니다" 같이 액션 가능한 경로 명시
-   - 자동 트리거는 불가능함을 짧게 알리되, 사용자가 직접 할 수 있는 방법을 분명히
-4. 모르는 건 "산출물에 없어 확신할 수 없어요" 솔직히. 추측은 "(추정)".
-5. 카피·문구 질문은 "워디한테 직접 호출하시는 게 정확해요" 짧게 언급 가능.
+2. 위 산출물 정보가 보이면 그 안의 내용을 인용. "산출물에 적용된지 모르겠다" 같은 회피 답변 절대 금지.
+3. **specialist 학습 ≠ specialist 호출 — 명확히 구분!**
+   - "워디 학습은 되어 있어요" = 에이전트 자체의 페르소나·예시 세팅 (모든 미션에 공통)
+   - "워디 호출됨" = 이 미션에서 실제로 워디를 트리거해 검수 산출물을 만든 상태
+   - 디렉터가 "워디 결과 반영" 같은 말을 하는데 위 표에서 워디가 ✗ 상태면:
+     **"이 미션에서는 워디를 아직 호출하지 않으셔서 검수 결과가 없어요. 지금 호출하려면: ① 메시지 입력란 TO 드롭다운에서 'Wordy (UX 라이팅)' 선택 후 '시안 검수해줘' 보내기, 또는 ② 채팅 하단 '👥 팀원 호출' 패널 펼치고 워디 클릭"** 식으로 명확히 안내
+4. 디렉터가 **행동 명령**("다시 만들어줘", "수정해줘", "적용해줘")을 하면:
+   - 관련 산출물이 있으면 그 핵심 1~3개 인용 + **구체적 다음 단계** 안내 (디자인 시안 모달 → 화면 단위 patch 등)
+   - 자동 트리거는 불가능함을 짧게 알리되, 직접 할 수 있는 경로는 분명히
+5. 모르는 건 "산출물에 없어 확신할 수 없어요" 솔직히. 추측은 "(추정)".
 6. 한국어, 자연스러운 대화체로 3~7문장. 너무 짧으면 도움 안 됨.`
 
   const reply = await callGemini({
