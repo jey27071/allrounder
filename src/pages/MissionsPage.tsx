@@ -15,16 +15,17 @@ import MissionListCard from '@/components/MissionListCard'
 
 interface MissionsPageProps {
   onMissionChange?: (mission: Mission | null) => void
-  openModal: boolean
-  onCloseModal: () => void
 }
 
-export default function MissionsPage({ onMissionChange, openModal, onCloseModal }: MissionsPageProps) {
+export default function MissionsPage({ onMissionChange }: MissionsPageProps) {
   const [missions, setMissions] = useState<Mission[]>([])
   const [selectedMission, setSelectedMission] = useState<Mission | null>(null)
   const [loading, setLoading] = useState(true)
   const [setupError, setSetupError] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  // Phase 21: 새 미션 모달은 이제 페이지 내부에서만 관리
+  const [openLocalModal, setOpenLocalModal] = useState(false)
+  const handleCloseModal = () => setOpenLocalModal(false)
 
   useEffect(() => {
     void initialize()
@@ -86,7 +87,7 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
   function handleMissionCreated(mission: Mission) {
     setMissions((prev) => [mission, ...prev])
     setSelectedMission(mission)
-    onCloseModal()
+    handleCloseModal()
   }
 
   async function handleSelectMission(mission: Mission) {
@@ -163,6 +164,13 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
       <main className="flex h-full overflow-hidden">
         {/* Mission list */}
         <div className="w-64 border-r border-border overflow-y-auto p-4 space-y-2 shrink-0">
+          {/* + 새 미션 (Phase 21: 사이드바에서 여기로 이동) */}
+          <button
+            onClick={() => setOpenLocalModal(true)}
+            className="w-full bg-primary text-white rounded py-2 text-sm font-medium hover:opacity-90 transition mb-2"
+          >
+            + 새 미션
+          </button>
           <div className="flex items-center justify-between px-1 mb-2">
             <div className="text-xs font-medium text-gray-500">
               {showArchived ? '보관함' : '미션'} ({missions.length})
@@ -178,7 +186,7 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
             <div className="text-xs text-gray-400 px-1 mt-4">
               {showArchived
                 ? '보관된 미션이 없습니다.'
-                : '미션이 없습니다.\n좌측 사이드바의 [+ 새 미션]에서 시작하세요.'}
+                : '미션이 없습니다.\n위 [+ 새 미션] 버튼으로 시작하세요.'}
             </div>
           ) : (
             missions.map((m) => (
@@ -203,15 +211,21 @@ export default function MissionsPage({ onMissionChange, openModal, onCloseModal 
             <div className="p-10 h-full flex flex-col items-center justify-center text-center">
               <div className="text-3xl mb-4">🎯</div>
               <h2 className="text-xl font-bold mb-2">첫 미션을 시작해보세요</h2>
-              <p className="text-sm text-gray-500 max-w-md">
-                좌측 사이드바의 [+ 새 미션]을 클릭하거나, 미션 헌장 템플릿으로 빠르게 시작할 수 있습니다.
+              <p className="text-sm text-gray-500 max-w-md mb-4">
+                좌측 [+ 새 미션] 버튼으로 시작하거나, 미션 헌장 템플릿으로 빠르게 시작할 수 있습니다.
               </p>
+              <button
+                onClick={() => setOpenLocalModal(true)}
+                className="px-4 py-2 text-sm rounded bg-primary text-white hover:opacity-90"
+              >
+                + 새 미션 시작
+              </button>
             </div>
           )}
         </div>
       </main>
 
-      <NewMissionModal open={openModal} onClose={onCloseModal} onCreated={handleMissionCreated} />
+      <NewMissionModal open={openLocalModal} onClose={handleCloseModal} onCreated={handleMissionCreated} />
     </>
   )
 }

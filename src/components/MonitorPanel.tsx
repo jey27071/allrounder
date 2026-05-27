@@ -7,6 +7,8 @@ import DeliverableViewerModal from './DeliverableViewerModal'
 
 interface MonitorPanelProps {
   mission?: Mission | null
+  collapsed?: boolean
+  onToggleCollapse?: () => void
 }
 
 const DELIVERABLE_LABEL: Record<string, string> = {
@@ -34,10 +36,30 @@ const AGENT_LABEL: Record<AgentId, string> = {
   qa_bot: 'QA봇',
 }
 
-export default function MonitorPanel({ mission }: MonitorPanelProps) {
+export default function MonitorPanel({ mission, collapsed, onToggleCollapse }: MonitorPanelProps) {
   const currentStepIndex = mission ? stateToStepIndex(mission.current_state) : -1
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
   const [viewing, setViewing] = useState<Deliverable | null>(null)
+
+  if (collapsed) {
+    return (
+      <aside className="border-l border-border flex flex-col items-center py-3 bg-surface">
+        <button
+          onClick={onToggleCollapse}
+          className="w-8 h-8 rounded flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          title="진행 상황 패널 펼치기"
+        >
+          «
+        </button>
+        <div
+          className="mt-3 text-[10px] text-gray-400 tracking-wider"
+          style={{ writingMode: 'vertical-rl' }}
+        >
+          진행 상황
+        </div>
+      </aside>
+    )
+  }
 
   useEffect(() => {
     if (!mission) {
@@ -75,7 +97,18 @@ export default function MonitorPanel({ mission }: MonitorPanelProps) {
   return (
     <aside className="border-l border-border overflow-y-auto">
       <div className="p-6">
-        <div className="font-bold mb-4">진행 상황</div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="font-bold">진행 상황</div>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="text-gray-400 hover:text-gray-700 text-lg leading-none"
+              title="진행 상황 패널 접기"
+            >
+              »
+            </button>
+          )}
+        </div>
 
         {!mission ? (
           <div className="text-sm text-gray-500">
