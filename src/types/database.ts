@@ -170,6 +170,7 @@ export type Database = {
         Row: {
           id: string
           agent_id: AgentId
+          collection_id: string | null
           name: string
           description: string | null
           storage_path: string
@@ -184,6 +185,7 @@ export type Database = {
         Insert: {
           id?: string
           agent_id: AgentId
+          collection_id?: string | null
           name: string
           description?: string | null
           storage_path: string
@@ -196,6 +198,29 @@ export type Database = {
           updated_at?: string
         }
         Update: Partial<Database['public']['Tables']['agent_visual_references']['Insert']>
+      }
+      agent_reference_collections: {
+        Row: {
+          id: string
+          agent_id: AgentId
+          name: string
+          description: string | null
+          color: string | null
+          sort_order: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          agent_id: AgentId
+          name: string
+          description?: string | null
+          color?: string | null
+          sort_order?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['agent_reference_collections']['Insert']>
       }
       agent_design_systems: {
         Row: {

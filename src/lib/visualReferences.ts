@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import type { AgentId, AgentVisualReference } from '@/types/app'
+import type { AgentId, AgentVisualReference, AgentReferenceCollection } from '@/types/app'
 
 const BUCKET = 'agent-references'
 
@@ -22,7 +22,7 @@ export interface UploadResult {
 export async function uploadVisualReference(
   agentId: AgentId,
   file: File,
-  meta?: { name?: string; description?: string; active?: boolean },
+  meta?: { name?: string; description?: string; active?: boolean; collectionId?: string | null },
 ): Promise<UploadResult> {
   if (!supabase) return { ok: false, error: 'Supabase 미설정' }
   if (!ALLOWED_MIME.has(file.type)) {
@@ -63,6 +63,7 @@ export async function uploadVisualReference(
     .from('agent_visual_references')
     .insert({
       agent_id: agentId,
+      collection_id: meta?.collectionId ?? null,
       name: meta?.name ?? file.name,
       description: meta?.description ?? null,
       storage_path: storagePath,
@@ -82,14 +83,24 @@ export async function uploadVisualReference(
   return { ok: true, reference: data as AgentVisualReference }
 }
 
-export async function listVisualReferences(agentId: AgentId): Promise<AgentVisualReference[]> {
+export async function listVisualReferences(
+  agentId: AgentId,
+  options?: { collectionId?: string | null | 'all' },
+): Promise<AgentVisualReference[]> {
   if (!supabase) return []
-  const { data, error } = await supabase
+  // deno-lint-ignore no-explicit-any
+  let q: any = supabase
     .from('agent_visual_references')
     .select('*')
     .eq('agent_id', agentId)
     .order('active', { ascending: false })
     .order('created_at', { ascending: false })
+  const cid = options?.collectionId
+  if (cid !== undefined && cid !== 'all') {
+    if (cid === null) q = q.is('collection_id', null)
+    else q = q.eq('collection_id', cid)
+  }
+  const { data, error } = await q
   if (error) {
     console.error('visual_references 조회 실패:', error)
     return []
@@ -150,6 +161,113 @@ export async function getSignedUrl(storagePath: string): Promise<string | null> 
 // ============================================================
 // 헬퍼
 // ============================================================
+
+// ============================================================
+// 이미지를 다른 컬렉션으로 이동
+// ============================================================
+
+export async function moveReferenceToCollection(
+  refId: string,
+  collectionId: string | null,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+  const { error } = await supabase
+    .from('agent_visual_references')
+    .update({ collection_id: collectionId })
+    .eq('id', refId)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+// ============================================================
+// 컬렉션 CRUD
+// ============================================================
+
+export async function listCollections(agentId: AgentId): Promise<AgentReferenceCollection[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase
+    .from('agent_reference_collections')
+    .select('*')
+    .eq('agent_id', agentId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+  if (error) {
+    console.error('collections 조회 실패:', error)
+    return []
+  }
+  return (data ?? []) as AgentReferenceCollection[]
+}
+
+export async function createCollection(
+  agentId: AgentId,
+  input: { name: string; description?: string; color?: string | null },
+): Promise<{ ok: boolean; error?: string; collection?: AgentReferenceCollection }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+  if (!input.name.trim()) return { ok: false, error: '이름을 입력하세요' }
+  const { data, error } = await supabase
+    .from('agent_reference_collections')
+    .insert({
+      agent_id: agentId,
+      name: input.name.trim(),
+      description: input.description ?? null,
+      color: input.color ?? null,
+    })
+    .select('*')
+    .single()
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, collection: data as AgentReferenceCollection }
+}
+
+export async function updateCollection(
+  id: string,
+  patch: { name?: string; description?: string | null; color?: string | null; sort_order?: number },
+): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+  const { error } = await supabase.from('agent_reference_collections').update(patch).eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+export async function deleteCollection(id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정' }
+  // 안 이미지는 ON DELETE SET NULL로 미분류로 이동
+  const { error } = await supabase.from('agent_reference_collections').delete().eq('id', id)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
+/** 컬렉션 안의 모든 이미지를 일괄 활성/비활성. 한도 초과 시 실패 보고. */
+export async function setCollectionImagesActive(
+  agentId: AgentId,
+  collectionId: string | null,
+  active: boolean,
+): Promise<{ ok: boolean; error?: string; affected: number }> {
+  if (!supabase) return { ok: false, error: 'Supabase 미설정', affected: 0 }
+  if (active) {
+    // 컬렉션 안의 비활성 이미지 수 + 현재 활성 수 ≤ 한도
+    const { count: incoming } = await supabase
+      .from('agent_visual_references')
+      .select('id', { count: 'exact', head: true })
+      .eq('agent_id', agentId)
+      .eq('active', false)
+      .filter('collection_id', collectionId === null ? 'is' : 'eq', collectionId)
+    const current = await countActiveReferences(agentId)
+    if (current + (incoming ?? 0) > MAX_ACTIVE_REFERENCES) {
+      return {
+        ok: false,
+        error: `활성 한도 초과 (현재 ${current} + 새로 켤 ${incoming} > ${MAX_ACTIVE_REFERENCES})`,
+        affected: 0,
+      }
+    }
+  }
+  // deno-lint-ignore no-explicit-any
+  let q: any = supabase.from('agent_visual_references').update({ active }).eq('agent_id', agentId)
+  if (collectionId === null) q = q.is('collection_id', null)
+  else q = q.eq('collection_id', collectionId)
+  const { error, count } = await q
+  if (error) return { ok: false, error: error.message, affected: 0 }
+  return { ok: true, affected: count ?? 0 }
+}
 
 function readImageSize(file: File): Promise<{ width: number | null; height: number | null }> {
   return new Promise((resolve) => {

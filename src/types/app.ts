@@ -12,6 +12,7 @@ export type AgentKnowledge = Database['public']['Tables']['agent_knowledge']['Ro
 export type AgentExample = Database['public']['Tables']['agent_examples']['Row']
 export type AgentDesignSystem = Database['public']['Tables']['agent_design_systems']['Row']
 export type AgentVisualReference = Database['public']['Tables']['agent_visual_references']['Row']
+export type AgentReferenceCollection = Database['public']['Tables']['agent_reference_collections']['Row']
 export type Deliverable = Database['public']['Tables']['deliverables']['Row']
 export type Diary = Database['public']['Tables']['diaries']['Row']
 export type WisdomPrinciple = Database['public']['Tables']['wisdom_principles']['Row']
