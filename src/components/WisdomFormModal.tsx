@@ -19,6 +19,7 @@ const AGENT_OPTIONS: { id: AgentId; label: string; kind: 'core' | 'specialist' }
   { id: 'kitt', label: 'KITT', kind: 'specialist' },
   { id: 'ethica', label: 'Ethica', kind: 'specialist' },
   { id: 'qa_bot', label: 'QA봇', kind: 'specialist' },
+  { id: 'wordy', label: 'Wordy (UX 라이팅)', kind: 'specialist' },
 ]
 
 export default function WisdomFormModal({ initial, onClose, onSaved }: WisdomFormModalProps) {

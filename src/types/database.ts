@@ -28,6 +28,7 @@ export type MissionState =
 export type BuiltinAgentId =
   | 'jarvis' | 'lumi' | 'aki' | 'joi'
   | 'friday' | 'tars' | 'echo' | 'kitt' | 'ethica' | 'qa_bot'
+  | 'wordy'
 
 /**
  * 일반 에이전트 ID — 빌트인 + 사용자가 추가한 커스텀 에이전트.

@@ -44,7 +44,7 @@ type Tab = 'prompt' | 'knowledge' | 'examples' | 'versions' | 'wisdom' | 'design
  * - 커스텀: 사용자가 비주얼 작업용으로 만들 수도 있으므로 항상 표시
  */
 const VISUAL_BUILTIN_AGENTS = new Set<string>([
-  'joi', 'tars',
+  'joi', 'tars', 'wordy',
   'joi_palette', 'joi_type',
   'tars_markup', 'tars_logic',
 ])

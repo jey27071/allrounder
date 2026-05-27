@@ -1326,6 +1326,13 @@ const SPECIALIST_CONFIG: Record<string, any> = {
     needsBlueprint: true,
     needsDesigns: false,
   },
+  wordy: {
+    label: 'UX 라이팅 검수',
+    deliverableType: 'custom_report',
+    model: 'gemini-2.5-flash',
+    needsBlueprint: false,
+    needsDesigns: true,
+  },
 }
 
 async function handleSpecialistInvocation(

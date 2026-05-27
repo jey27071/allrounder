@@ -18,6 +18,7 @@ const SENDER_LABEL: Record<string, string> = {
   kitt: 'KITT',
   ethica: 'Ethica',
   qa_bot: 'QA봇',
+  wordy: '워디',
   // Phase 13 sub-agents
   lumi_data: '루미·데이터',
   lumi_scout: '루미·스카웃',
@@ -46,6 +47,7 @@ const SENDER_COLOR: Record<string, string> = {
   kitt: 'bg-agent-kitt text-white',
   ethica: 'bg-agent-ethica text-white',
   qa_bot: 'bg-agent-qa text-white',
+  wordy: 'bg-agent-wordy text-white',
   lumi_data: 'bg-agent-lumi text-white',
   lumi_scout: 'bg-agent-lumi text-white',
   aki_ia: 'bg-agent-aki text-white',

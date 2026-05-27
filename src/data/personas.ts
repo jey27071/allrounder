@@ -348,4 +348,26 @@ export const WISDOM_SEEDS: WisdomSeed[] = [
     applies_to: ['lumi'],
     version: 'v1.0',
   },
+  // Phase 23: 워디·조이용 한국어 UX 라이팅 기본 원칙
+  {
+    title: '한국어 종결어 일관성',
+    description:
+      '한 화면 안에서 "-요"와 "-습니다"를 혼용하지 않는다. 친근한 톤은 "-요", 공식 톤은 "-습니다"로 통일. 페르소나 정의에서 톤이 결정되면 일관 적용.',
+    applies_to: ['wordy', 'joi'],
+    version: 'v1.0',
+  },
+  {
+    title: '명령형 라벨보다 행동 동사',
+    description:
+      '"확인", "OK" 같은 모호한 버튼 라벨 대신 사용자가 무엇을 하게 되는지 보이는 동사 사용. "확인" → "결제하기", "OK" → "저장하고 나가기". 다음 화면이 예측되어야 한다.',
+    applies_to: ['wordy', 'joi'],
+    version: 'v1.0',
+  },
+  {
+    title: '에러·빈 상태는 다음 행동이 보여야 한다',
+    description:
+      '"Error" 같은 상태만 알리는 메시지는 금지. 사용자가 다음에 무엇을 할 수 있는지 함께 제시. "잠시 후 다시 시도해주세요", "새 항목을 추가해 시작해보세요" 식으로.',
+    applies_to: ['wordy', 'joi'],
+    version: 'v1.0',
+  },
 ]

@@ -15,6 +15,7 @@ export type ColorToken =
   | 'agent-kitt'
   | 'agent-ethica'
   | 'agent-qa'
+  | 'agent-wordy'
 
 const BG: Record<ColorToken, string> = {
   'agent-jarvis': 'bg-agent-jarvis',
@@ -27,6 +28,7 @@ const BG: Record<ColorToken, string> = {
   'agent-kitt': 'bg-agent-kitt',
   'agent-ethica': 'bg-agent-ethica',
   'agent-qa': 'bg-agent-qa',
+  'agent-wordy': 'bg-agent-wordy',
 }
 
 const DEFAULT_BG = 'bg-gray-400'
@@ -47,4 +49,5 @@ export const COLOR_TOKEN_OPTIONS: { token: ColorToken; label: string }[] = [
   { token: 'agent-kitt', label: '브릭' },
   { token: 'agent-ethica', label: '라벤더' },
   { token: 'agent-qa', label: '틸' },
+  { token: 'agent-wordy', label: '오션블루' },
 ]

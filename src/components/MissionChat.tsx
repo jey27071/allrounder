@@ -49,9 +49,10 @@ const RECIPIENT_OPTIONS: { id: Recipient; label: string; kind: 'core' | 'special
   { id: 'kitt', label: 'KITT (법무)', kind: 'specialist' },
   { id: 'ethica', label: 'Ethica (윤리)', kind: 'specialist' },
   { id: 'qa_bot', label: 'QA봇 (테스트)', kind: 'specialist' },
+  { id: 'wordy', label: 'Wordy (UX 라이팅)', kind: 'specialist' },
 ]
 
-const SPECIALIST_IDS: Recipient[] = ['friday', 'tars', 'echo', 'kitt', 'ethica', 'qa_bot']
+const SPECIALIST_IDS: Recipient[] = ['friday', 'tars', 'echo', 'kitt', 'ethica', 'qa_bot', 'wordy']
 
 export default function MissionChat({ mission }: MissionChatProps) {
   const [messages, setMessages] = useState<Message[]>([])

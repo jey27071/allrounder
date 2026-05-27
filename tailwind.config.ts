@@ -21,6 +21,7 @@ export default {
           kitt: '#A85050',
           ethica: '#8B7EBF',
           qa: '#4C7B7A',
+          wordy: '#3F7BAF',
         },
       },
       fontFamily: {

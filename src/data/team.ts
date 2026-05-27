@@ -91,6 +91,13 @@ export const AGENT_TEAM: AgentMeta[] = [
     description: 'P0 기능별 테스트 케이스 생성',
     kind: 'invoke',
   },
+  {
+    id: 'wordy',
+    name: '워디',
+    label: 'UX 라이팅',
+    description: '마이크로 카피 검수·개선',
+    kind: 'invoke',
+  },
 ]
 
 export const AGENT_COLORS: Record<AgentId, string> = {
@@ -104,6 +111,7 @@ export const AGENT_COLORS: Record<AgentId, string> = {
   kitt: 'bg-agent-kitt',
   ethica: 'bg-agent-ethica',
   qa_bot: 'bg-agent-qa',
+  wordy: 'bg-agent-wordy',
 }
 
 /**
