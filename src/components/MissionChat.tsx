@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { listMessages, sendDirectorMessage } from '@/lib/missions'
-import { orchestrate, invokeSpecialist, generateSlides } from '@/lib/orchestrate'
+import { orchestrate, invokeSpecialist, generateSlides, jarvisChat } from '@/lib/orchestrate'
 import type { Mission, Message, MissionState, AgentId } from '@/types/app'
 import MessageBubble from './MessageBubble'
 import Cp1Modal from './Cp1Modal'
@@ -165,12 +165,21 @@ export default function MissionChat({ mission }: MissionChatProps) {
     setInput('')
     setCc([])
 
-    // 2) TO 에이전트에 따라 자동 응답 트리거
+    // 2) TO 에이전트 트리거 (Phase 24-A)
+    //    - specialist (friday/tars/echo/kitt/ethica/qa_bot/wordy): invokeSpecialist
+    //    - jarvis 또는 워크플로우 에이전트 (lumi/aki/joi): jarvisChat — 자비스가 답변·라우팅
+    //      (워크플로우 자동 진행은 [▶ 진행시키기] 버튼에서만)
     if (SPECIALIST_IDS.includes(to)) {
       void invokeSpecialist(mission.id, to)
     } else {
-      // jarvis/lumi/aki/joi → orchestrate (Jarvis가 컨텍스트 기반으로 라우팅)
-      void orchestrate(mission.id)
+      void jarvisChat(mission.id)
+    }
+
+    // 3) Phase 24-A2: CC 태그된 specialist도 자동 invoke
+    for (const ccId of filteredCc) {
+      if (SPECIALIST_IDS.includes(ccId)) {
+        void invokeSpecialist(mission.id, ccId)
+      }
     }
 
     setSending(false)

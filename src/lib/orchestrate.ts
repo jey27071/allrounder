@@ -14,7 +14,7 @@ interface OrchestratePayload {
   mission_id: string
   action?:
     | 'cp1' | 'cp2' | 'cp3'
-    | 'specialist' | 'generate_slides'
+    | 'specialist' | 'generate_slides' | 'jarvis_chat'
     | 'regenerate_screen' | 'patch_screen' | 'update_screen_html'
   selected_candidate_index?: number
   decision?: 'approve' | 'revise' | 'branch'
@@ -104,6 +104,14 @@ export async function invokeSpecialist(
     mission_id: missionId,
     action: 'specialist',
     specialist_id: specialistId,
+  })
+}
+
+/** 자비스 대화 응답 (Phase 24-A3) — 워크플로우 진행 없이 디렉터 메시지에 답변만 */
+export async function jarvisChat(missionId: string): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'jarvis_chat',
   })
 }
 

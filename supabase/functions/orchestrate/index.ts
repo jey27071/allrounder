@@ -1345,6 +1345,21 @@ async function handleSpecialistInvocation(
 
   const systemPrompt = await loadAgentPrompt(supabase, specialistId)
 
+  // === Phase 24-A1: 디렉터의 가장 최근 명령(메시지) 가져오기 ===
+  // TO=specialistId 또는 CC에 specialistId가 포함된 가장 최근 director 메시지
+  const { data: directorMsgs } = await supabase
+    .from('messages')
+    .select('content, recipient, cc, created_at')
+    .eq('mission_id', mission.id)
+    .eq('sender', 'director')
+    .order('created_at', { ascending: false })
+    .limit(10)
+  // deno-lint-ignore no-explicit-any
+  const directorInstruction = (directorMsgs ?? []).find((m: any) =>
+    m.recipient === specialistId ||
+    (Array.isArray(m.cc) && m.cc.includes(specialistId))
+  )?.content ?? null
+
   // 필요한 컨텍스트 자료 로드
   let contextParts = `미션 헌장:\n- 도메인: ${mission.domain}\n- 임무: ${mission.charter}\n${mission.context ? `- 컨텍스트: ${mission.context}` : ''}`
 
@@ -1376,7 +1391,10 @@ ${contextParts}
   const specSubResults = await runSubAgents(supabase, specialistId, mission, specSubUserPrompt)
   const specSubContext = formatSubAgentContext(specSubResults)
 
-  const userPrompt = `${contextParts}${specSubContext}\n\n위 정보를 바탕으로 당신의 전문 영역 보고서를 작성하세요. 하위팀이 있다면 그 결과를 종합·교차검증하여 반영. 시스템 프롬프트에 정의된 JSON 형식으로만 응답.`
+  const directorBlock = directorInstruction
+    ? `\n\n[디렉터의 직접 지시 — 최우선 반영]\n"${directorInstruction}"\n`
+    : ''
+  const userPrompt = `${contextParts}${specSubContext}${directorBlock}\n\n위 정보를 바탕으로 당신의 전문 영역 보고서를 작성하세요.${directorInstruction ? ' 디렉터의 직접 지시가 있다면 그 의도에 맞춰 검수 범위·관점을 조정.' : ''} 하위팀이 있다면 그 결과를 종합·교차검증하여 반영. 시스템 프롬프트에 정의된 JSON 형식으로만 응답.`
 
   const specImages = await loadAgentImages(supabase, specialistId)
   const response = await callGemini({
@@ -1889,16 +1907,19 @@ async function handlePostCompletionMessage(
     .map((s) => `- ${s.name} (${s.area}): ${calledSpecialists.has(s.id) ? '✓ 이 미션에서 호출됨 (산출물 있음)' : '✗ 호출되지 않음'}`)
     .join('\n')
 
-  const systemPrompt = await loadAgentPrompt(supabase, 'jarvis')
-  const userPrompt = `[디렉터의 사후 질문에 대한 답변]
+  const isCompleted = mission.current_state === 'COMPLETED' || mission.current_state === 'ERROR_STATE'
 
-이 미션과 산출물을 당신은 이미 다 알고 있습니다. 디렉터의 질문에 직접·구체적으로 답하세요.
+  const systemPrompt = await loadAgentPrompt(supabase, 'jarvis')
+  const userPrompt = `[디렉터의 자비스 향한 메시지에 답변]
+
+이 미션과 산출물을 당신은 다 알고 있습니다. 디렉터의 질문/명령에 직접·구체적으로 답하세요.
 
 미션:
 - 제목: ${mission.title}
 - 도메인: ${mission.domain}
 - 임무: ${mission.charter}
 ${mission.context ? `- 컨텍스트: ${mission.context}` : ''}
+- 현재 상태: ${mission.current_state} ${isCompleted ? '(완료된 미션)' : '(진행 중)'}
 
 생성된 산출물과 핵심 내용:
 ${deliverableContext}
@@ -1906,7 +1927,7 @@ ${deliverableContext}
 각 specialist의 이 미션 호출 여부 (반드시 확인!):
 ${specialistStatus}
 
-디렉터의 질문:
+디렉터의 메시지:
 "${lastMsg.content}"
 
 ⚠️ 답변 지침:
@@ -2092,6 +2113,10 @@ Deno.serve(async (req) => {
     } else if (action === 'generate_slides') {
       const result = await handleGenerateSlides(supabase, mission)
       return jsonResp({ ok: true, ...result }, 200)
+    } else if (action === 'jarvis_chat') {
+      // Phase 24-A3: 어느 상태에서든 디렉터의 일반 메시지에 자비스가 응답
+      const r = await handlePostCompletionMessage(supabase, mission)
+      return jsonResp({ ok: true, state: mission.current_state, ...r }, 200)
     } else if (action === 'regenerate_screen') {
       const result = await handleRegenerateScreen(supabase, mission, body)
       return jsonResp({ ok: true, ...result }, 200)
