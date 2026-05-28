@@ -16,6 +16,7 @@ interface MissionChatProps {
   mission: Mission
 }
 
+// JOI_DESIGNING / JOI_REVISING 라벨은 mission.mission_type에 따라 동적 (조이 또는 이지)
 const PROGRESS_BUTTON_LABELS: Partial<Record<MissionState, string>> = {
   LUMI_WORKING: '▶ 루미에게 작업 진행시키기',
   LUMI_RESUBMITTING: '▶ 루미에게 재작업 진행시키기',
@@ -26,6 +27,16 @@ const PROGRESS_BUTTON_LABELS: Partial<Record<MissionState, string>> = {
   JOI_REVISING: '▶ 조이에게 디자인 수정 요청',
 }
 
+function getProgressLabel(state: MissionState, missionType: string | null | undefined): string | undefined {
+  const base = PROGRESS_BUTTON_LABELS[state]
+  if (!base) return undefined
+  if (missionType === 'physical_product') {
+    if (state === 'JOI_DESIGNING') return '▶ 이지에게 산업디자인 진행시키기'
+    if (state === 'JOI_REVISING') return '▶ 이지에게 디자인 수정 요청'
+  }
+  return base
+}
+
 const PROGRESS_BUTTON_COLOR: Partial<Record<MissionState, string>> = {
   LUMI_WORKING: 'bg-agent-lumi',
   LUMI_RESUBMITTING: 'bg-agent-lumi',
@@ -34,6 +45,13 @@ const PROGRESS_BUTTON_COLOR: Partial<Record<MissionState, string>> = {
   AKI_REVISING: 'bg-agent-aki',
   JOI_DESIGNING: 'bg-agent-joi',
   JOI_REVISING: 'bg-agent-joi',
+}
+
+function getProgressColor(state: MissionState, missionType: string | null | undefined): string {
+  if (missionType === 'physical_product' && (state === 'JOI_DESIGNING' || state === 'JOI_REVISING')) {
+    return 'bg-agent-izzy'
+  }
+  return PROGRESS_BUTTON_COLOR[state] ?? 'bg-primary'
 }
 
 type Recipient = AgentId
@@ -50,9 +68,13 @@ const RECIPIENT_OPTIONS: { id: Recipient; label: string; kind: 'core' | 'special
   { id: 'ethica', label: 'Ethica (윤리)', kind: 'specialist' },
   { id: 'qa_bot', label: 'QA봇 (테스트)', kind: 'specialist' },
   { id: 'wordy', label: 'Wordy (UX 라이팅)', kind: 'specialist' },
+  { id: 'izzy', label: 'IzZy (산업디자인, 물리제품)', kind: 'core' },
+  { id: 'meka', label: 'Meka (하드웨어 엔지니어링)', kind: 'specialist' },
+  { id: 'forge', label: 'Forge (제조성·코스트)', kind: 'specialist' },
+  { id: 'pako', label: 'Pako (패키징·언박싱)', kind: 'specialist' },
 ]
 
-const SPECIALIST_IDS: Recipient[] = ['friday', 'tars', 'echo', 'kitt', 'ethica', 'qa_bot', 'wordy']
+const SPECIALIST_IDS: Recipient[] = ['friday', 'tars', 'echo', 'kitt', 'ethica', 'qa_bot', 'wordy', 'meka', 'forge', 'pako']
 
 export default function MissionChat({ mission }: MissionChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
@@ -75,8 +97,8 @@ export default function MissionChat({ mission }: MissionChatProps) {
   const [viewingDeck, setViewingDeck] = useState<SlideDeck | null>(null)
   const [slidesError, setSlidesError] = useState<string | null>(null)
 
-  const progressLabel = PROGRESS_BUTTON_LABELS[mission.current_state]
-  const progressColor = PROGRESS_BUTTON_COLOR[mission.current_state] ?? 'bg-primary'
+  const progressLabel = getProgressLabel(mission.current_state, mission.mission_type)
+  const progressColor = getProgressColor(mission.current_state, mission.mission_type)
   const canProgress = progressLabel != null
 
   useEffect(() => {

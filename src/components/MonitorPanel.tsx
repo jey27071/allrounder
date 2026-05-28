@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { listMissionDeliverables } from '@/lib/deliverables'
 import { WORKFLOW_STEPS, stateToStepIndex } from '@/types/app'
-import type { Mission, Deliverable, AgentId } from '@/types/app'
+import type { Mission, Deliverable } from '@/types/app'
 import DeliverableViewerModal from './DeliverableViewerModal'
 
 interface MonitorPanelProps {
@@ -21,9 +21,15 @@ const DELIVERABLE_LABEL: Record<string, string> = {
   legal_review: '법무 검토',
   ethics_review: '윤리 검토',
   test_suite: '테스트 케이스',
+  custom_report: '검수 보고서',
+  slide_deck: '슬라이드 deck',
+  industrial_design: '산업디자인 (이지)',
+  mechanical_spec: '하드웨어 설계 (메카)',
+  cost_estimate: '제조·코스트 (포지)',
+  packaging_spec: '패키징 (파코)',
 }
 
-const AGENT_LABEL: Record<AgentId, string> = {
+const AGENT_LABEL: Record<string, string> = {
   jarvis: 'Jarvis',
   lumi: 'Lumi',
   aki: 'Aki',
@@ -34,6 +40,11 @@ const AGENT_LABEL: Record<AgentId, string> = {
   kitt: 'KITT',
   ethica: 'Ethica',
   qa_bot: 'QA봇',
+  wordy: 'Wordy',
+  izzy: 'IzZy',
+  meka: 'Meka',
+  forge: 'Forge',
+  pako: 'Pako',
 }
 
 export default function MonitorPanel({ mission, collapsed, onToggleCollapse }: MonitorPanelProps) {
@@ -174,7 +185,7 @@ export default function MonitorPanel({ mission, collapsed, onToggleCollapse }: M
                 <div className="space-y-1.5">
                   {deliverables.map((d) => {
                     const label = DELIVERABLE_LABEL[d.type] ?? d.type
-                    const creator = AGENT_LABEL[d.created_by as AgentId] ?? d.created_by
+                    const creator = AGENT_LABEL[d.created_by] ?? d.created_by
                     return (
                       <button
                         key={d.id}

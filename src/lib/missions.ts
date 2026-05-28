@@ -1,12 +1,13 @@
 import { supabase } from '@/lib/supabase'
 import { orchestrate } from '@/lib/orchestrate'
-import type { Mission, Message, Deliverable, Diary } from '@/types/app'
+import type { Mission, Message, Deliverable, Diary, MissionType } from '@/types/app'
 
 export interface CreateMissionInput {
   title: string
   domain: string
   charter: string
   context?: string
+  mission_type?: MissionType
 }
 
 export async function createMission(input: CreateMissionInput): Promise<Mission | null> {
@@ -21,6 +22,7 @@ export async function createMission(input: CreateMissionInput): Promise<Mission 
       context: input.context ?? null,
       status: 'in_progress',
       current_state: 'MISSION_CREATED',
+      mission_type: input.mission_type ?? 'ui_design',
       reject_cycle: 0,
     })
     .select()

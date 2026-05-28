@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Deliverable, AgentId } from '@/types/app'
+import type { Deliverable } from '@/types/app'
 import ScreenPreview from './ScreenPreview'
 import {
   downloadScreenHtml,
@@ -26,9 +26,15 @@ const DELIVERABLE_LABEL: Record<string, string> = {
   legal_review: '법무 검토',
   ethics_review: '윤리 검토',
   test_suite: '테스트 케이스',
+  custom_report: '검수 보고서',
+  slide_deck: '슬라이드 deck',
+  industrial_design: '산업디자인',
+  mechanical_spec: '하드웨어 설계',
+  cost_estimate: '제조·코스트',
+  packaging_spec: '패키징',
 }
 
-const AGENT_LABEL: Record<AgentId, string> = {
+const AGENT_LABEL: Record<string, string> = {
   jarvis: 'Jarvis',
   lumi: 'Lumi',
   aki: 'Aki',
@@ -39,6 +45,11 @@ const AGENT_LABEL: Record<AgentId, string> = {
   kitt: 'KITT',
   ethica: 'Ethica',
   qa_bot: 'QA봇',
+  wordy: 'Wordy',
+  izzy: 'IzZy',
+  meka: 'Meka',
+  forge: 'Forge',
+  pako: 'Pako',
 }
 
 interface ScreenItem {
@@ -62,7 +73,7 @@ export default function DeliverableViewerModal({
   onClose,
 }: DeliverableViewerModalProps) {
   const label = DELIVERABLE_LABEL[deliverable.type] ?? deliverable.type
-  const agent = AGENT_LABEL[deliverable.created_by as AgentId] ?? deliverable.created_by
+  const agent = AGENT_LABEL[deliverable.created_by] ?? deliverable.created_by
 
   const isScreenDesigns = deliverable.type === 'screen_designs'
   const data = deliverable.data as ScreenDesignsData

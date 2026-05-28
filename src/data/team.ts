@@ -98,6 +98,36 @@ export const AGENT_TEAM: AgentMeta[] = [
     description: '마이크로 카피 검수·개선',
     kind: 'invoke',
   },
+  // Phase 25: 물리 제품 디자인 (이지는 워크플로우 자동, 나머지 셋은 invoke)
+  {
+    id: 'izzy',
+    name: '이지',
+    label: '산업디자인',
+    description: '외관·소재·치수·인터랙션',
+    kind: 'workflow',
+    workflowStates: ['JOI_DESIGNING', 'JOI_REVISING'],
+  },
+  {
+    id: 'meka',
+    name: '메카',
+    label: '하드웨어 엔지니어링',
+    description: 'BOM·기구·전원·EMI',
+    kind: 'invoke',
+  },
+  {
+    id: 'forge',
+    name: '포지',
+    label: '제조성·코스트',
+    description: '공법·MOQ·가격대',
+    kind: 'invoke',
+  },
+  {
+    id: 'pako',
+    name: '파코',
+    label: '패키징·언박싱',
+    description: '박스·QSG·라벨링',
+    kind: 'invoke',
+  },
 ]
 
 export const AGENT_COLORS: Record<AgentId, string> = {
@@ -112,6 +142,10 @@ export const AGENT_COLORS: Record<AgentId, string> = {
   ethica: 'bg-agent-ethica',
   qa_bot: 'bg-agent-qa',
   wordy: 'bg-agent-wordy',
+  izzy: 'bg-agent-izzy',
+  meka: 'bg-agent-meka',
+  forge: 'bg-agent-forge',
+  pako: 'bg-agent-pako',
 }
 
 /**

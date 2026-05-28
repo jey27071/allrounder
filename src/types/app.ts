@@ -18,6 +18,7 @@ export type Diary = Database['public']['Tables']['diaries']['Row']
 export type WisdomPrinciple = Database['public']['Tables']['wisdom_principles']['Row']
 
 export type { MissionStatus, MissionState, AgentId, BuiltinAgentId, MessageSender, MessageType }
+export type { MissionType } from './database'
 
 /**
  * 워크플로우 단계의 시각화 정의

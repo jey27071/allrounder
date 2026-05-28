@@ -22,6 +22,10 @@ export default {
           ethica: '#8B7EBF',
           qa: '#4C7B7A',
           wordy: '#3F7BAF',
+          izzy: '#6B7A5C',
+          meka: '#525E6E',
+          forge: '#A8743F',
+          pako: '#8E7B6B',
         },
       },
       fontFamily: {

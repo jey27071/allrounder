@@ -20,6 +20,10 @@ const AGENT_OPTIONS: { id: AgentId; label: string; kind: 'core' | 'specialist' }
   { id: 'ethica', label: 'Ethica', kind: 'specialist' },
   { id: 'qa_bot', label: 'QA봇', kind: 'specialist' },
   { id: 'wordy', label: 'Wordy (UX 라이팅)', kind: 'specialist' },
+  { id: 'izzy', label: 'IzZy (산업디자인)', kind: 'specialist' },
+  { id: 'meka', label: 'Meka (하드웨어)', kind: 'specialist' },
+  { id: 'forge', label: 'Forge (제조성)', kind: 'specialist' },
+  { id: 'pako', label: 'Pako (패키징)', kind: 'specialist' },
 ]
 
 export default function WisdomFormModal({ initial, onClose, onSaved }: WisdomFormModalProps) {

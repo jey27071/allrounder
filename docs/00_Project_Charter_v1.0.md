@@ -104,6 +104,16 @@
 
 ---
 
+- **Phase 25**: 물리 제품 디자인 워크플로우
+  - 마이그레이션: `supabase/migrations/012_physical_product.sql` (missions.mission_type + 4개 새 deliverable types)
+  - 페르소나: `src/data/physical_product_agents.ts` — 이지·메카·포지·파코
+  - **이지(IzZy)**: 산업디자인 (조이의 물리 제품 대체) — JOI_DESIGNING 상태에서 mission_type='physical_product'면 자동 호출
+  - **메카(Meka)**: 하드웨어·기구 엔지니어링 (specialist 호출)
+  - **포지(Forge)**: 제조성·소재·코스트 추정 (specialist 호출)
+  - **파코(Pako)**: 패키징·언박싱·QSG (specialist 호출)
+  - UI: NewMissionModal 미션 타입 선택 (UI 디자인 / 물리 제품), 진행 버튼 라벨/색상 동적
+  - 한계: Gemini는 렌더링·도면 생성 불가. 산출물은 모두 텍스트 명세(Midjourney 프롬프트·치수·소재). 디자이너가 별도 시각화
+
 - **Phase 19**: 조이 시안 강화 + Figma 연계 + 정교 수정
   - **19-A 모바일/PC 미리보기**: `ScreenPreview`에 디바이스 토글(📱 375 / 📟 768 / 💻 1280 / Full). iframe 너비 동적 변경 + 디바이스 프레임 시각화
   - **19-B 시안 export**:

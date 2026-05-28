@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createMission } from '@/lib/missions'
-import type { Mission } from '@/types/app'
+import type { Mission, MissionType } from '@/types/app'
 
 interface NewMissionModalProps {
   open: boolean
@@ -21,6 +21,7 @@ export default function NewMissionModal({ open, onClose, onCreated }: NewMission
   const [domain, setDomain] = useState('')
   const [charter, setCharter] = useState('')
   const [context, setContext] = useState('')
+  const [missionType, setMissionType] = useState<MissionType>('ui_design')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,6 +39,7 @@ export default function NewMissionModal({ open, onClose, onCreated }: NewMission
     setDomain('')
     setCharter('')
     setContext('')
+    setMissionType('ui_design')
     setError(null)
   }
 
@@ -53,6 +55,7 @@ export default function NewMissionModal({ open, onClose, onCreated }: NewMission
       domain: domain.trim(),
       charter: charter.trim(),
       context: context.trim() || undefined,
+      mission_type: missionType,
     })
     setSubmitting(false)
 
@@ -91,6 +94,44 @@ export default function NewMissionModal({ open, onClose, onCreated }: NewMission
         </div>
 
         <div className="p-6 space-y-5">
+          {/* Phase 25: 미션 타입 선택 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-2">미션 타입 *</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setMissionType('ui_design')}
+                className={`text-left p-3 rounded border-2 transition ${
+                  missionType === 'ui_design'
+                    ? 'border-agent-joi bg-agent-joi/5'
+                    : 'border-border hover:border-gray-400'
+                }`}
+              >
+                <div className="text-sm font-medium mb-0.5">💻 UI 디자인</div>
+                <div className="text-[11px] text-gray-500 leading-snug">
+                  웹·앱·SaaS. 조이가 HTML 시안 작성
+                </div>
+              </button>
+              <button
+                onClick={() => setMissionType('physical_product')}
+                className={`text-left p-3 rounded border-2 transition ${
+                  missionType === 'physical_product'
+                    ? 'border-agent-izzy bg-agent-izzy/5'
+                    : 'border-border hover:border-gray-400'
+                }`}
+              >
+                <div className="text-sm font-medium mb-0.5">📦 물리 제품</div>
+                <div className="text-[11px] text-gray-500 leading-snug">
+                  가전·IoT·액세서리. 이지가 산업디자인 명세
+                </div>
+              </button>
+            </div>
+            {missionType === 'physical_product' && (
+              <div className="mt-2 text-[10px] text-gray-500 leading-relaxed">
+                💡 메카(하드웨어)·포지(제조성)·파코(패키징)는 디렉터가 [팀원 호출]에서 추가로 부르실 수 있어요. Gemini는 렌더링·도면을 직접 생성하지 못하니 명세 위주(Midjourney 프롬프트·치수·소재).
+              </div>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">미션 제목 *</label>
             <input

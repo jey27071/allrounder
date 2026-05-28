@@ -29,6 +29,7 @@ export type BuiltinAgentId =
   | 'jarvis' | 'lumi' | 'aki' | 'joi'
   | 'friday' | 'tars' | 'echo' | 'kitt' | 'ethica' | 'qa_bot'
   | 'wordy'
+  | 'izzy' | 'meka' | 'forge' | 'pako'
 
 /**
  * 일반 에이전트 ID — 빌트인 + 사용자가 추가한 커스텀 에이전트.
@@ -52,6 +53,9 @@ export type DeliverableType =
   | 'business_model' | 'frontend_code' | 'a11y_audit' | 'legal_review' | 'ethics_review' | 'test_suite'
   | 'custom_report'
   | 'slide_deck'
+  | 'industrial_design' | 'mechanical_spec' | 'cost_estimate' | 'packaging_spec'
+
+export type MissionType = 'ui_design' | 'physical_product'
 
 export type DeliverableStatus = 'pending' | 'approved' | 'rejected' | 'revised' | 'final'
 
@@ -68,6 +72,7 @@ export type Database = {
           context: string | null
           status: MissionStatus
           current_state: MissionState
+          mission_type: MissionType
           reject_cycle: number
           selected_candidate_index: number | null
           archived: boolean
@@ -84,6 +89,7 @@ export type Database = {
           context?: string | null
           status?: MissionStatus
           current_state?: MissionState
+          mission_type?: MissionType
           reject_cycle?: number
           selected_candidate_index?: number | null
           archived?: boolean

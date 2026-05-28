@@ -1014,6 +1014,160 @@ P0 기능 중 핵심 3~5개 화면을 HTML+TailwindCSS 코드로 작성하세요
   return 'WAITING_CP3'
 }
 
+// ============================================================
+// 이지(IzZy) — 물리 제품 산업디자인 (Phase 25)
+// ============================================================
+
+async function handleIzzyDesigning(supabase: SbClient, mission: Mission): Promise<string> {
+  const systemPrompt = await loadAgentPrompt(supabase, 'izzy')
+  const izzyImages = await loadAgentImages(supabase, 'izzy')
+
+  const blueprint = await getLatestDeliverable(supabase, mission.id, 'product_blueprint')
+  if (!blueprint) {
+    throw new Error('Product Blueprint not found for IzZy')
+  }
+
+  // 수정 요청 컨텍스트
+  let reviseContext = ''
+  if (mission.current_state === 'JOI_REVISING') {
+    const { data: lastRevise } = await supabase
+      .from('messages')
+      .select('content')
+      .eq('mission_id', mission.id)
+      .eq('sender', 'director')
+      .eq('type', 'UserInput')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+    if (lastRevise) {
+      reviseContext = `\n\n[디렉터의 수정 요청]\n${lastRevise.content}\n\n위 수정 요청을 반영하여 새 컨셉을 작성하세요.`
+    }
+  }
+
+  const userPrompt = `[아키의 Product Blueprint를 받아 물리 제품의 산업디자인을 작성합니다]
+
+Blueprint 데이터 (JSON):
+${JSON.stringify(blueprint.data, null, 2)}
+
+미션 헌장:
+- 도메인: ${mission.domain}
+- 임무: ${mission.charter}
+
+이 제품은 물리적으로 양산될 가전·IoT·액세서리입니다. 외관·소재·치수·인터랙션 요소를 구체적으로 정의하세요.
+3가지 컨셉을 서로 다른 방향(예: 미니멀·친근·산업적)으로 제시하고, 디자이너가 그대로 Midjourney나 CAD에서 시작할 수 있는 수준의 명세를 작성.
+
+⚠️ 출력 형식 — JSON으로만 응답. 시스템 프롬프트에 정의된 스키마(design_intent, concepts[], rendering_brief_en 등) 그대로.${reviseContext}`
+
+  const izzyResponse = await callGemini({
+    systemPrompt,
+    userMessage: userPrompt,
+    images: izzyImages,
+    model: 'gemini-2.5-pro',
+    temperature: 0.7,
+    jsonMode: true,
+  })
+
+  // deno-lint-ignore no-explicit-any
+  let parsed: any = parseLooseJson(izzyResponse)
+  if (!parsed) {
+    console.error('IzZy JSON parse failed. Raw:', izzyResponse.slice(0, 500))
+    parsed = { error: 'parse_failed', raw: izzyResponse }
+  }
+
+  const md = renderIndustrialDesignMarkdown(parsed)
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'izzy',
+    recipient: 'director',
+    cc: ['aki'],
+    re: 'Industrial Design v1.0 — 제출',
+    type: 'Deliverable',
+    content: md,
+    metadata: { format: 'industrial_design', parsed },
+  })
+
+  await supabase.from('deliverables').insert({
+    mission_id: mission.id,
+    type: 'industrial_design',
+    version: 'v1.0',
+    data: parsed,
+    raw_markdown: md,
+    created_by: 'izzy',
+    status: 'pending',
+  })
+
+  if (parsed.diary) {
+    await supabase.from('diaries').insert({
+      mission_id: mission.id,
+      agent_id: 'izzy',
+      context_label: 'IzZy Industrial Design v1.0',
+      difficulty: parsed.diary.difficulty,
+      insight: parsed.diary.insight,
+      next_try: parsed.diary.next_try,
+    })
+  }
+
+  await supabase.from('missions').update({
+    current_state: 'WAITING_CP3',
+    updated_at: new Date().toISOString(),
+  }).eq('id', mission.id)
+
+  return 'WAITING_CP3'
+}
+
+// deno-lint-ignore no-explicit-any
+function renderIndustrialDesignMarkdown(d: any): string {
+  if (d.error) return `(파싱 실패)\n\n${d.raw ?? ''}`
+  let md = `## Industrial Design v1.0\n\n`
+  if (d.design_intent) md += `**디자인 의도**\n${d.design_intent}\n\n`
+  const concepts = Array.isArray(d.concepts) ? d.concepts : []
+  for (let i = 0; i < concepts.length; i++) {
+    const c = concepts[i]
+    md += `\n### 컨셉 #${i + 1}: ${c.name ?? ''}\n`
+    if (c.tagline) md += `_${c.tagline}_\n\n`
+    if (c.form_factor) md += `**형태/치수:** ${c.form_factor}\n\n`
+    if (Array.isArray(c.materials) && c.materials.length > 0) {
+      md += `**소재**\n`
+      // deno-lint-ignore no-explicit-any
+      for (const m of c.materials as any[]) {
+        md += `- ${m.part}: ${m.material} (${m.finish})\n`
+      }
+      md += '\n'
+    }
+    if (Array.isArray(c.colors) && c.colors.length > 0) {
+      md += `**색상**\n`
+      // deno-lint-ignore no-explicit-any
+      for (const col of c.colors as any[]) {
+        md += `- ${col.name} \`${col.hex}\` — ${col.rationale}\n`
+      }
+      md += '\n'
+    }
+    if (Array.isArray(c.interaction_elements) && c.interaction_elements.length > 0) {
+      md += `**인터랙션 요소**\n`
+      // deno-lint-ignore no-explicit-any
+      for (const ie of c.interaction_elements as any[]) {
+        md += `- ${ie.type} @ ${ie.location}: ${ie.behavior}\n`
+      }
+      md += '\n'
+    }
+    if (c.ergonomics) md += `**에르고노믹스:** ${c.ergonomics}\n\n`
+    if (c.reference_aesthetic) md += `**레퍼런스:** ${c.reference_aesthetic}\n\n`
+    if (c.rendering_brief_en) md += `**Midjourney/Imagen 프롬프트 (영문):**\n\`\`\`\n${c.rendering_brief_en}\n\`\`\`\n\n`
+  }
+  if (typeof d.recommended_concept_index === 'number') {
+    md += `\n👉 **추천 컨셉**: #${d.recommended_concept_index + 1}\n\n`
+  }
+  if (Array.isArray(d.common_principles) && d.common_principles.length > 0) {
+    md += `\n### 공통 원칙\n`
+    for (const p of d.common_principles) md += `- ${p}\n`
+  }
+  if (d.diary) {
+    md += `\n### 회고\n- 난점: ${d.diary.difficulty}\n- 깨달음: ${d.diary.insight}\n- 다음에: ${d.diary.next_try}\n`
+  }
+  return md
+}
+
 // deno-lint-ignore no-explicit-any
 function renderScreenDesignsMarkdown(d: any): string {
   if (d.error) return `(파싱 실패)\n\n${d.raw ?? ''}`
@@ -1332,6 +1486,28 @@ const SPECIALIST_CONFIG: Record<string, any> = {
     model: 'gemini-2.5-flash',
     needsBlueprint: false,
     needsDesigns: true,
+  },
+  // Phase 25: 물리 제품 specialists
+  meka: {
+    label: '하드웨어 엔지니어링',
+    deliverableType: 'mechanical_spec',
+    model: 'gemini-2.5-pro',
+    needsBlueprint: true,
+    needsDesigns: false,
+  },
+  forge: {
+    label: '제조성·코스트',
+    deliverableType: 'cost_estimate',
+    model: 'gemini-2.5-flash',
+    needsBlueprint: true,
+    needsDesigns: false,
+  },
+  pako: {
+    label: '패키징·언박싱',
+    deliverableType: 'packaging_spec',
+    model: 'gemini-2.5-flash',
+    needsBlueprint: true,
+    needsDesigns: false,
   },
 }
 
@@ -2278,7 +2454,12 @@ Deno.serve(async (req) => {
           break
         case 'JOI_DESIGNING':
         case 'JOI_REVISING':
-          newState = await handleJoiDesigning(supabase, mission)
+          // Phase 25: 미션 타입에 따라 조이(UI) 또는 이지(물리 제품) 분기
+          if (mission.mission_type === 'physical_product') {
+            newState = await handleIzzyDesigning(supabase, mission)
+          } else {
+            newState = await handleJoiDesigning(supabase, mission)
+          }
           break
         case 'WAITING_CP1':
         case 'WAITING_CP2':
