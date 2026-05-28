@@ -3,6 +3,7 @@ import { getLatestDeliverable } from '@/lib/deliverables'
 import { decideCp3 } from '@/lib/orchestrate'
 import type { Mission } from '@/types/app'
 import ScreenPreview from './ScreenPreview'
+import IndustrialDesignView, { type IndustrialDesignData } from './IndustrialDesignView'
 
 interface Cp3ModalProps {
   mission: Mission
@@ -25,7 +26,9 @@ interface ScreenDesignsData {
 }
 
 export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
+  const isPhysical = mission.mission_type === 'physical_product'
   const [data, setData] = useState<ScreenDesignsData | null>(null)
+  const [industrialData, setIndustrialData] = useState<IndustrialDesignData | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,11 +43,20 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
 
   async function load() {
     setLoading(true)
-    const d = await getLatestDeliverable(mission.id, 'screen_designs')
-    if (d?.data) {
-      setData(d.data as ScreenDesignsData)
+    if (isPhysical) {
+      const d = await getLatestDeliverable(mission.id, 'industrial_design')
+      if (d?.data) {
+        setIndustrialData(d.data as IndustrialDesignData)
+      } else {
+        setError('산업디자인 데이터를 찾을 수 없습니다. 이지가 산출물을 만들지 못했을 수 있어요.')
+      }
     } else {
-      setError('디자인 데이터를 찾을 수 없습니다.')
+      const d = await getLatestDeliverable(mission.id, 'screen_designs')
+      if (d?.data) {
+        setData(d.data as ScreenDesignsData)
+      } else {
+        setError('디자인 데이터를 찾을 수 없습니다.')
+      }
     }
     setLoading(false)
   }
@@ -102,14 +114,23 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-border">
-          <div className="text-xs font-bold text-agent-joi mb-1">★ CP3 — 디렉터의 최종 검토 (디자인)</div>
+          <div className={`text-xs font-bold mb-1 ${isPhysical ? 'text-agent-izzy' : 'text-agent-joi'}`}>
+            ★ CP3 — 디렉터의 최종 검토 ({isPhysical ? '산업디자인' : '디자인'})
+          </div>
           <h2 className="text-lg font-bold">{mission.title}</h2>
           <p className="text-sm text-gray-500 mt-1">
-            조이가 작성한 화면 시안을 검토하고 결정해주세요.
+            {isPhysical
+              ? '이지가 제안한 3가지 산업디자인 컨셉을 검토하고 결정해주세요.'
+              : '조이가 작성한 화면 시안을 검토하고 결정해주세요.'}
           </p>
-          {data?.design_intent && (
+          {!isPhysical && data?.design_intent && (
             <p className="mt-3 text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded">
               <strong>디자인 의도:</strong> {data.design_intent}
+            </p>
+          )}
+          {isPhysical && industrialData?.design_intent && (
+            <p className="mt-3 text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded">
+              <strong>디자인 의도:</strong> {industrialData.design_intent}
             </p>
           )}
         </div>
@@ -117,6 +138,12 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
         <div className="flex-1 overflow-hidden flex">
           {loading ? (
             <div className="p-6 text-sm text-gray-500">불러오는 중...</div>
+          ) : isPhysical ? (
+            industrialData ? (
+              <IndustrialDesignView data={industrialData} />
+            ) : (
+              <div className="p-6 text-sm text-gray-500">산업디자인 데이터 없음</div>
+            )
           ) : (
             <>
               {/* Screen tabs */}
@@ -212,12 +239,18 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
         )}
 
         <div className="p-4 border-t border-border flex items-center justify-between bg-gray-50">
-          <button
-            onClick={handleDownloadHtml}
-            className="px-3 py-2 text-xs rounded border border-border hover:bg-gray-100"
-          >
-            📥 HTML 다운로드
-          </button>
+          {isPhysical ? (
+            <div className="text-[10px] text-gray-400">
+              💡 Midjourney 프롬프트는 각 컨셉의 "🎨 프롬프트 복사"로 사용
+            </div>
+          ) : (
+            <button
+              onClick={handleDownloadHtml}
+              className="px-3 py-2 text-xs rounded border border-border hover:bg-gray-100"
+            >
+              📥 HTML 다운로드
+            </button>
+          )}
           <div className="flex gap-2 flex-wrap justify-end">
             <button
               onClick={() => void handleDecisionWithComment('cancel')}
