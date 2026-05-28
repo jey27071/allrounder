@@ -1511,6 +1511,52 @@ async function handleCp3Decision(supabase: SbClient, mission: Mission, decision:
     return 'JOI_REVISING'
   }
 
+  // Phase 24-B1: 반려 = 시안 폐기·조이 처음부터 다시
+  if (decision === 'reject') {
+    // 기존 screen_designs deliverable을 'rejected' 상태로 마킹 (데이터는 보존)
+    await supabase
+      .from('deliverables')
+      .update({ status: 'rejected' })
+      .eq('mission_id', mission.id)
+      .eq('type', 'screen_designs')
+
+    await supabase.from('messages').insert({
+      mission_id: mission.id,
+      sender: 'director',
+      type: 'Reject',
+      re: 'CP3 — 시안 반려',
+      content: comments
+        ? `시안 반려 — 조이가 처음부터 다시 작업합니다.\n\n반려 사유:\n${comments}`
+        : '시안 반려 — 조이가 처음부터 다시 작업합니다.',
+    })
+    // JOI_DESIGNING으로 되돌림 (REVISING이 아니라 처음부터)
+    await supabase.from('missions').update({
+      current_state: 'JOI_DESIGNING',
+      updated_at: new Date().toISOString(),
+    }).eq('id', mission.id)
+    return 'JOI_DESIGNING'
+  }
+
+  // Phase 24-B1: 취소 = 이 단계까지 모으고 미션 종료 (이미 만든 산출물은 보존)
+  if (decision === 'cancel') {
+    await supabase.from('messages').insert({
+      mission_id: mission.id,
+      sender: 'director',
+      type: 'UserInput',
+      re: 'CP3 — 미션 종료(취소)',
+      content: comments
+        ? `이 단계까지의 산출물을 보존하고 미션을 종료합니다.\n\n사유:\n${comments}`
+        : '이 단계까지의 산출물을 보존하고 미션을 종료합니다.',
+    })
+    await supabase.from('missions').update({
+      current_state: 'COMPLETED',
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', mission.id)
+    return 'COMPLETED'
+  }
+
   throw new Error(`알 수 없는 decision: ${decision}`)
 }
 
@@ -1775,6 +1821,90 @@ ${currentHtml}
   })
 
   return { note: 'patch 완료', screen_index: idx }
+}
+
+// Phase 24-B2: 모든 화면에 동일 지시를 일괄 patch
+// deno-lint-ignore no-explicit-any
+async function handlePatchAllScreens(supabase: SbClient, mission: Mission, body: any) {
+  const instruction: string = body.instruction ?? ''
+  if (!instruction.trim()) throw new Error('instruction required')
+
+  const deliverable = await loadLatestScreenDesigns(supabase, mission.id)
+  if (!deliverable) throw new Error('screen_designs deliverable not found')
+  const data = deliverable.data
+  // deno-lint-ignore no-explicit-any
+  const screens: any[] = data?.screens ?? []
+  if (screens.length === 0) return { note: '대상 화면 없음', updated: 0 }
+
+  const systemPrompt = await loadAgentPrompt(supabase, 'joi')
+  const joiImages = await loadAgentImages(supabase, 'joi')
+
+  // 각 화면을 병렬로 patch
+  // deno-lint-ignore no-explicit-any
+  const results = await Promise.all(screens.map(async (target: any, idx: number) => {
+    const currentHtml = target.html ?? target.html_tailwind ?? ''
+    const userPrompt = `[전체 시안 일괄 patch — ${idx + 1}/${screens.length}번 화면]
+
+화면: ${target.name}
+디렉터 지시 (모든 화면에 동일 적용): ${instruction}
+
+현재 HTML (이 코드를 최소한만 수정):
+\`\`\`html
+${currentHtml}
+\`\`\`
+
+⚠️ 출력 — JSON only:
+{
+  "html": "수정된 전체 HTML (구조 유지, 지시된 부분만 변경)",
+  "changes": ["이 화면에서 변경한 내용"]
+}`
+    try {
+      const raw = await callGemini({
+        systemPrompt,
+        userMessage: userPrompt,
+        images: joiImages,
+        model: 'gemini-2.5-flash',
+        temperature: 0.3,
+        jsonMode: true,
+      })
+      // deno-lint-ignore no-explicit-any
+      const parsed: any = parseLooseJson(raw)
+      if (parsed?.html) {
+        return { idx, ok: true, html: parsed.html, changes: parsed.changes ?? [] }
+      }
+      return { idx, ok: false, error: 'parse_failed' }
+    } catch (e) {
+      return { idx, ok: false, error: String(e) }
+    }
+  }))
+
+  // 성공한 화면만 교체
+  let updated = 0
+  for (const r of results) {
+    if (r.ok && r.html) {
+      screens[r.idx] = { ...screens[r.idx], html: r.html }
+      updated++
+    }
+  }
+  data.screens = screens
+  await saveScreenDesignsUpdate(supabase, deliverable.id, data)
+
+  const failedCount = results.filter((r) => !r.ok).length
+  const allChanges = results
+    .filter((r) => r.ok)
+    .flatMap((r, i) => (r.changes ?? []).map((c: string) => `- [${screens[r.idx]?.name ?? '#' + (i + 1)}] ${c}`))
+
+  await supabase.from('messages').insert({
+    mission_id: mission.id,
+    sender: 'joi',
+    recipient: 'director',
+    re: `전체 시안 일괄 patch (${updated}/${screens.length}개 완료)`,
+    type: 'StatusUpdate',
+    content: `🎯 전체 시안에 일괄 patch 적용\n\n_지시:_ ${instruction}\n\n결과: ${updated}/${screens.length} 화면 성공${failedCount > 0 ? ` (${failedCount}개 실패)` : ''}${allChanges.length > 0 ? '\n\n주요 변경:\n' + allChanges.slice(0, 20).join('\n') : ''}`,
+    metadata: { kind: 'screens_bulk_patched', updated, failed: failedCount },
+  })
+
+  return { note: '일괄 patch 완료', updated, failed: failedCount }
 }
 
 /** 디렉터가 직접 편집한 HTML을 그대로 저장 (LLM 호출 없음) */
@@ -2122,6 +2252,9 @@ Deno.serve(async (req) => {
       return jsonResp({ ok: true, ...result }, 200)
     } else if (action === 'patch_screen') {
       const result = await handlePatchScreen(supabase, mission, body)
+      return jsonResp({ ok: true, ...result }, 200)
+    } else if (action === 'patch_all_screens') {
+      const result = await handlePatchAllScreens(supabase, mission, body)
       return jsonResp({ ok: true, ...result }, 200)
     } else if (action === 'update_screen_html') {
       const result = await handleUpdateScreenHtml(supabase, mission, body)

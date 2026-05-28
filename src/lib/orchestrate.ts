@@ -15,7 +15,7 @@ interface OrchestratePayload {
   action?:
     | 'cp1' | 'cp2' | 'cp3'
     | 'specialist' | 'generate_slides' | 'jarvis_chat'
-    | 'regenerate_screen' | 'patch_screen' | 'update_screen_html'
+    | 'regenerate_screen' | 'patch_screen' | 'patch_all_screens' | 'update_screen_html'
   selected_candidate_index?: number
   decision?: 'approve' | 'revise' | 'branch'
   comments?: string
@@ -84,13 +84,14 @@ export async function decideCp2(
 /** CP3 — Joi 디자인 시안 결정 */
 export async function decideCp3(
   missionId: string,
-  decision: 'approve' | 'revise',
+  decision: 'approve' | 'revise' | 'reject' | 'cancel',
   comments?: string,
 ): Promise<OrchestrateResponse> {
   return callOrchestrate({
     mission_id: missionId,
     action: 'cp3',
-    decision,
+    // deno-lint-ignore no-explicit-any
+    decision: decision as any,
     comments,
   })
 }
@@ -147,6 +148,18 @@ export async function patchScreen(
     mission_id: missionId,
     action: 'patch_screen',
     screen_index: screenIndex,
+    instruction,
+  })
+}
+
+/** 시안 전체 일괄 patch (Phase 24-B2) — 화면 수만큼 Flash 호출 (병렬) */
+export async function patchAllScreens(
+  missionId: string,
+  instruction: string,
+): Promise<OrchestrateResponse> {
+  return callOrchestrate({
+    mission_id: missionId,
+    action: 'patch_all_screens',
     instruction,
   })
 }

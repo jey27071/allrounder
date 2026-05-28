@@ -30,8 +30,9 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeScreen, setActiveScreen] = useState<number>(0)
-  const [showRevise, setShowRevise] = useState(false)
-  const [reviseComments, setReviseComments] = useState('')
+  // 'revise' | 'reject' | 'cancel' — 입력창이 열린 모드
+  const [commentMode, setCommentMode] = useState<null | 'revise' | 'reject' | 'cancel'>(null)
+  const [comment, setComment] = useState('')
 
   useEffect(() => {
     void load()
@@ -60,16 +61,17 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
     onClose()
   }
 
-  async function handleRevise() {
-    if (!showRevise) {
-      setShowRevise(true)
+  async function handleDecisionWithComment(decision: 'revise' | 'reject' | 'cancel') {
+    if (commentMode !== decision) {
+      setCommentMode(decision)
+      setComment('')
       return
     }
     setSubmitting(true)
     setError(null)
-    const result = await decideCp3(mission.id, 'revise', reviseComments || undefined)
+    const result = await decideCp3(mission.id, decision, comment || undefined)
     if (!result.ok) {
-      setError(result.error ?? '수정 요청 실패')
+      setError(result.error ?? '처리 실패')
       setSubmitting(false)
       return
     }
@@ -186,14 +188,24 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
           </div>
         )}
 
-        {showRevise && (
+        {commentMode && (
           <div className="px-6 pb-3">
-            <label className="text-xs font-medium text-gray-700 mb-1 block">수정 요청 내용</label>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">
+              {commentMode === 'revise' && '수정 요청 내용 (조이가 부분 수정)'}
+              {commentMode === 'reject' && '반려 사유 (조이가 처음부터 다시 작업)'}
+              {commentMode === 'cancel' && '취소 사유 (이 단계까지 산출물 보존, 미션 종료)'}
+            </label>
             <textarea
-              value={reviseComments}
-              onChange={(e) => setReviseComments(e.target.value)}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
               rows={3}
-              placeholder="어떤 부분을 어떻게 수정해야 할지 적어주세요."
+              placeholder={
+                commentMode === 'revise'
+                  ? '어떤 부분을 어떻게 수정해야 할지 적어주세요.'
+                  : commentMode === 'reject'
+                    ? '왜 시안을 폐기하고 다시 작업해야 하는지'
+                    : '미션을 여기서 종료하는 이유 (선택)'
+              }
               className="w-full border border-border rounded px-3 py-2 text-sm focus:outline-none focus:border-primary resize-none"
             />
           </div>
@@ -206,13 +218,29 @@ export default function Cp3Modal({ mission, onClose }: Cp3ModalProps) {
           >
             📥 HTML 다운로드
           </button>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap justify-end">
             <button
-              onClick={() => void handleRevise()}
+              onClick={() => void handleDecisionWithComment('cancel')}
               disabled={submitting}
-              className="px-4 py-2 text-sm rounded border border-border hover:bg-gray-100 disabled:opacity-50"
+              className="px-3 py-2 text-sm rounded border border-border text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+              title="이 단계까지의 산출물을 보존하고 미션 종료"
             >
-              {showRevise ? '수정 요청 전송' : '🔄 수정 요청'}
+              {commentMode === 'cancel' ? '취소 확정' : '⊘ 취소(종료)'}
+            </button>
+            <button
+              onClick={() => void handleDecisionWithComment('reject')}
+              disabled={submitting}
+              className="px-3 py-2 text-sm rounded border border-warning/50 text-warning hover:bg-warning/5 disabled:opacity-50"
+              title="이 시안 폐기, 조이가 처음부터 다시 작업"
+            >
+              {commentMode === 'reject' ? '반려 확정' : '✕ 반려(재작업)'}
+            </button>
+            <button
+              onClick={() => void handleDecisionWithComment('revise')}
+              disabled={submitting}
+              className="px-3 py-2 text-sm rounded border border-border hover:bg-gray-100 disabled:opacity-50"
+            >
+              {commentMode === 'revise' ? '수정 요청 전송' : '🔄 수정 요청'}
             </button>
             <button
               onClick={() => void handleApprove()}

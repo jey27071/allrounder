@@ -7,7 +7,7 @@ import {
   downloadScreensCombinedHtml,
   downloadScreenTokensAsTokensStudio,
 } from '@/lib/screenExport'
-import { regenerateScreen, patchScreen, updateScreenHtml } from '@/lib/orchestrate'
+import { regenerateScreen, patchScreen, patchAllScreens, updateScreenHtml } from '@/lib/orchestrate'
 import ScreensCanvas from './ScreensCanvas'
 
 interface DeliverableViewerModalProps {
@@ -81,6 +81,26 @@ export default function DeliverableViewerModal({
   // Phase 19-D: 풀스크린 / 캔버스 모드
   const [fullscreen, setFullscreen] = useState(false)
   const [viewMode, setViewMode] = useState<'single' | 'canvas'>('single')
+
+  // Phase 24-B2: 전체 일괄 patch
+  const [showBulk, setShowBulk] = useState(false)
+  const [bulkInstruction, setBulkInstruction] = useState('')
+  const [bulkBusy, setBulkBusy] = useState(false)
+
+  async function handlePatchAll() {
+    if (bulkBusy || !bulkInstruction.trim()) return
+    if (!confirm(`전체 ${screens.length}개 화면에 다음 patch를 일괄 적용합니다.\n\n"${bulkInstruction}"\n\nGemini Flash ${screens.length}회 호출 (병렬). 진행할까요?`)) return
+    setBulkBusy(true)
+    const r = await patchAllScreens(deliverable.mission_id, bulkInstruction.trim())
+    setBulkBusy(false)
+    if (!r.ok) {
+      alert('일괄 patch 실패: ' + (r.error ?? r.detail ?? ''))
+      return
+    }
+    setBulkInstruction('')
+    setShowBulk(false)
+    alert(`완료. ${r.note ?? ''}\n모달을 닫았다가 다시 열면 반영된 시안이 보입니다.`)
+  }
 
   function openInNewWindow() {
     const url = `${window.location.origin}/?view=screens&did=${deliverable.id}`
@@ -199,6 +219,15 @@ export default function DeliverableViewerModal({
                 </button>
               </div>
               <button
+                onClick={() => setShowBulk((v) => !v)}
+                className={`text-xs px-2 py-1 rounded border ${
+                  showBulk ? 'border-primary bg-primary text-white' : 'border-border hover:bg-gray-50'
+                }`}
+                title="모든 화면에 동일 지시로 일괄 patch"
+              >
+                🎯 전체 일괄 patch
+              </button>
+              <button
                 onClick={() => setFullscreen((v) => !v)}
                 className="text-xs px-2 py-1 rounded border border-border hover:bg-gray-50"
                 title={fullscreen ? '원래 크기' : '풀스크린'}
@@ -223,6 +252,35 @@ export default function DeliverableViewerModal({
             ×
           </button>
         </div>
+
+        {/* Phase 24-B2: 전체 일괄 patch 입력 (헤더 아래 토글) */}
+        {showBulk && isScreenDesigns && screens.length > 0 && (
+          <div className="px-4 py-3 border-b border-border bg-primary/5">
+            <div className="text-xs font-medium text-gray-700 mb-2">
+              🎯 전체 {screens.length}개 화면에 동일 지시로 일괄 patch
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={bulkInstruction}
+                onChange={(e) => setBulkInstruction(e.target.value)}
+                placeholder={'예: 모든 버튼의 카피를 "-요" 톤으로 통일 / 전체적으로 여백을 더 넓게 / 다크모드 톤으로'}
+                className="flex-1 border border-border rounded px-3 py-1.5 text-sm focus:outline-none focus:border-primary"
+                disabled={bulkBusy}
+              />
+              <button
+                onClick={() => void handlePatchAll()}
+                disabled={bulkBusy || !bulkInstruction.trim()}
+                className="text-sm px-3 py-1.5 rounded bg-primary text-white hover:opacity-90 disabled:opacity-40"
+              >
+                {bulkBusy ? `⏳ ${screens.length}개 patch 중...` : `전체 적용 (Flash ${screens.length}회)`}
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">
+              모든 화면에 동일한 지시가 전달됩니다. 각 화면별로 조이가 최소한의 변경으로 patch.
+            </p>
+          </div>
+        )}
 
         <div className="flex-1 min-h-0 overflow-hidden flex">
           {isScreenDesigns && screens.length > 0 && viewMode === 'canvas' ? (
