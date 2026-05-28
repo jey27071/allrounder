@@ -112,7 +112,15 @@
   - **포지(Forge)**: 제조성·소재·코스트 추정 (specialist 호출)
   - **파코(Pako)**: 패키징·언박싱·QSG (specialist 호출)
   - UI: NewMissionModal 미션 타입 선택 (UI 디자인 / 물리 제품), 진행 버튼 라벨/색상 동적
-  - 한계: Gemini는 렌더링·도면 생성 불가. 산출물은 모두 텍스트 명세(Midjourney 프롬프트·치수·소재). 디자이너가 별도 시각화
+  - 한계: 도면·CAD는 LLM 불가. 명세 위주
+
+- **Phase 26**: Imagen 3 자동 시각화 (이지 컨셉)
+  - Edge Function `callImagen` (`imagen-3.0-generate-002` API, 같은 Gemini 키)
+  - handleIzzyDesigning 응답 후 각 컨셉의 `rendering_brief_en`을 Imagen에 전달 → 1장씩 생성
+  - 결과는 Supabase Storage `agent-references` bucket의 `mission-{id}/imagen-*` 경로에 업로드
+  - 데이터 구조: 각 컨셉에 `image_storage_path` 추가
+  - IndustrialDesignView가 signed URL로 이미지 표시 ("Imagen 3 자동 생성 · 무드보드용" 안내)
+  - 비용: 미션당 약 $0.12 (이미지 3장). 실패 시 graceful — 명세는 그대로 보존
 
 - **Phase 19**: 조이 시안 강화 + Figma 연계 + 정교 수정
   - **19-A 모바일/PC 미리보기**: `ScreenPreview`에 디바이스 토글(📱 375 / 📟 768 / 💻 1280 / Full). iframe 너비 동적 변경 + 디바이스 프레임 시각화

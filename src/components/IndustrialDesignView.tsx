@@ -3,7 +3,8 @@
  * Cp3Modal에서 mission_type='physical_product'일 때 사용.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getSignedUrl } from '@/lib/visualReferences'
 
 interface Material { part?: string; material?: string; finish?: string }
 interface Color { name?: string; hex?: string; rationale?: string }
@@ -18,6 +19,7 @@ interface Concept {
   ergonomics?: string
   reference_aesthetic?: string
   rendering_brief_en?: string
+  image_storage_path?: string
 }
 
 export interface IndustrialDesignData {
@@ -101,6 +103,11 @@ export default function IndustrialDesignView({ data }: Props) {
               </div>
               {current.tagline && <p className="text-sm text-gray-600 italic">"{current.tagline}"</p>}
             </div>
+
+            {/* Phase 26: Imagen 자동 생성 이미지 */}
+            {current.image_storage_path && (
+              <ConceptImage path={current.image_storage_path} alt={current.name ?? '컨셉'} />
+            )}
 
             {current.form_factor && (
               <Section title="형태 / 치수">
@@ -201,6 +208,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     <div>
       <div className="text-[10px] uppercase text-gray-400 tracking-wider mb-1.5">{title}</div>
       {children}
+    </div>
+  )
+}
+
+function ConceptImage({ path, alt }: { path: string; alt: string }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    void getSignedUrl(path).then(setUrl)
+  }, [path])
+  return (
+    <div className="rounded-lg overflow-hidden border border-border bg-gray-50">
+      {url ? (
+        <img src={url} alt={alt} className="w-full h-auto block" />
+      ) : (
+        <div className="aspect-square flex items-center justify-center text-xs text-gray-400">
+          이미지 로딩 중...
+        </div>
+      )}
+      <div className="px-2 py-1 text-[10px] text-gray-500 border-t border-border bg-white">
+        🎨 Imagen 3 자동 생성 · 무드보드용 (정확한 설계도 아님)
+      </div>
     </div>
   )
 }

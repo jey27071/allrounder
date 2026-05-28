@@ -122,6 +122,71 @@ async function attemptGeminiModel(model: string, body: any): Promise<string> {
   throw lastError ?? new Error(`Gemini ${model} unreachable`)
 }
 
+// ============================================================
+// Imagen 3 — 이미지 생성 (Phase 26)
+// ============================================================
+/** Imagen 3로 이미지 1장 생성. 실패 시 null. */
+async function callImagen(prompt: string): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${GEMINI_API_KEY}`
+    const body = {
+      instances: [{ prompt }],
+      parameters: { sampleCount: 1, aspectRatio: '1:1' },
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!response.ok) {
+      const errText = await response.text()
+      console.warn(`Imagen API error (${response.status}): ${errText.slice(0, 300)}`)
+      return null
+    }
+    const data = await response.json()
+    // deno-lint-ignore no-explicit-any
+    const pred: any = data?.predictions?.[0]
+    if (!pred?.bytesBase64Encoded) {
+      console.warn('Imagen empty response', JSON.stringify(data).slice(0, 200))
+      return null
+    }
+    return { base64: pred.bytesBase64Encoded, mimeType: pred.mimeType ?? 'image/png' }
+  } catch (e) {
+    console.warn('Imagen call failed:', e)
+    return null
+  }
+}
+
+/** base64 이미지를 Supabase Storage `agent-references` bucket에 업로드. 성공 시 storage_path 반환. */
+async function uploadGeneratedImage(
+  supabase: SbClient,
+  missionId: string,
+  imageBase64: string,
+  mimeType: string,
+  label: string,
+): Promise<string | null> {
+  try {
+    const ext = mimeType.includes('png') ? 'png' : mimeType.includes('jpeg') ? 'jpg' : 'png'
+    const path = `mission-${missionId}/imagen-${Date.now()}-${label}.${ext}`
+    // base64 → Uint8Array
+    const binary = atob(imageBase64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const { error } = await supabase.storage.from('agent-references').upload(path, bytes, {
+      contentType: mimeType,
+      upsert: false,
+    })
+    if (error) {
+      console.warn(`Storage upload failed for ${path}:`, error.message)
+      return null
+    }
+    return path
+  } catch (e) {
+    console.warn('uploadGeneratedImage failed:', e)
+    return null
+  }
+}
+
 async function callGemini(opts: CallGeminiOpts): Promise<string> {
   const primaryModel = opts.model ?? 'gemini-2.5-flash'
 
@@ -1072,6 +1137,23 @@ ${JSON.stringify(blueprint.data, null, 2)}
   if (!parsed) {
     console.error('IzZy JSON parse failed. Raw:', izzyResponse.slice(0, 500))
     parsed = { error: 'parse_failed', raw: izzyResponse }
+  }
+
+  // Phase 26: 각 컨셉을 Imagen 3로 자동 시각화 (실패해도 전체 진행은 계속)
+  // deno-lint-ignore no-explicit-any
+  if (Array.isArray(parsed.concepts)) {
+    await Promise.all(
+      // deno-lint-ignore no-explicit-any
+      parsed.concepts.map(async (c: any, idx: number) => {
+        const prompt = c.rendering_brief_en
+        if (!prompt || typeof prompt !== 'string') return
+        const img = await callImagen(prompt)
+        if (!img) return
+        const safeLabel = (c.name ?? `concept-${idx}`).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 30) || `c${idx}`
+        const path = await uploadGeneratedImage(supabase, mission.id, img.base64, img.mimeType, safeLabel)
+        if (path) c.image_storage_path = path
+      }),
+    )
   }
 
   const md = renderIndustrialDesignMarkdown(parsed)
